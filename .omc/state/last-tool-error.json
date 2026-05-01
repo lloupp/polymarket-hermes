@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git -C \\\"/home/eduardodlima/Projetos/polymarket-hermes\\\" status --short\",\"timeout\":120000,\"description\":\"Show modified files\",\"run_in_background\":false,\"dangerouslyDisableSandbox\":false}",
+  "error": "Exit code 128\nfatal: not a git repository (or any of the parent directories): .git",
+  "timestamp": "2026-05-01T13:32:56.561Z",
+  "retry_count": 1
+}

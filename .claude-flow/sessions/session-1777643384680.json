@@ -1,0 +1,14 @@
+{
+  "id": "session-1777643384680",
+  "startedAt": "2026-05-01T13:49:44.680Z",
+  "cwd": "/home/eduardodlima/Projetos/polymarket-hermes",
+  "context": {},
+  "metrics": {
+    "edits": 4,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-05-01T13:57:02.542Z",
+  "duration": 437862
+}

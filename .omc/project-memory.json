@@ -1,0 +1,391 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1777598322469,
+  "projectRoot": "/home/eduardodlima/Projetos/polymarket-hermes",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "next",
+        "version": "16.2.4",
+        "category": "fullstack"
+      },
+      {
+        "name": "react",
+        "version": "19.2.5",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "19.2.5",
+        "category": "frontend"
+      },
+      {
+        "name": "vitest",
+        "version": "3.2.4",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {
+      "build": "tsc -p tsconfig.json",
+      "test": "vitest run",
+      "test:watch": "vitest",
+      "dashboard:dev": "next dev",
+      "operator:paper": "npx tsx scripts/paper-observer.ts"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "app",
+      "docs",
+      "scripts",
+      "src",
+      "tests"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "app": {
+      "path": "app",
+      "purpose": "Application code",
+      "fileCount": 1,
+      "lastAccessed": 1777598322418,
+      "keyFiles": [
+        "page.tsx"
+      ]
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 1,
+      "lastAccessed": 1777598322421,
+      "keyFiles": [
+        "vitest.config.js"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 5,
+      "lastAccessed": 1777598322435,
+      "keyFiles": [
+        "api-notes-polymarket.md",
+        "architecture.md",
+        "implementation-log.md",
+        "open-meteo-notes.md",
+        "operator-cycle.md"
+      ]
+    },
+    "operator-runtime": {
+      "path": "operator-runtime",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1777598322441,
+      "keyFiles": [
+        "paper-observer-check.ndjson",
+        "paper-observer-live-run-refined.ndjson",
+        "paper-observer-live-run.ndjson",
+        "paper-observer-real-weather-check.ndjson",
+        "paper-observer-real-weather.ndjson"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1777598322442,
+      "keyFiles": [
+        "paper-observer.ts"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1777598322443,
+      "keyFiles": []
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1777598322443,
+      "keyFiles": []
+    },
+    "dist/app": {
+      "path": "dist/app",
+      "purpose": "Application code",
+      "fileCount": 1,
+      "lastAccessed": 1777598322450,
+      "keyFiles": [
+        "page.js"
+      ]
+    },
+    "dist/src": {
+      "path": "dist/src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1777598322456,
+      "keyFiles": []
+    },
+    "dist/tests": {
+      "path": "dist/tests",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1777598322458,
+      "keyFiles": []
+    },
+    "src/types": {
+      "path": "src/types",
+      "purpose": "Type definitions",
+      "fileCount": 2,
+      "lastAccessed": 1777598322466,
+      "keyFiles": [
+        "market.ts",
+        "paper.ts"
+      ]
+    },
+    "tests/app": {
+      "path": "tests/app",
+      "purpose": "Application code",
+      "fileCount": 2,
+      "lastAccessed": 1777598322467,
+      "keyFiles": [
+        "dashboard-page.test.ts",
+        "dashboard-page.test.tsx"
+      ]
+    },
+    "tests/types": {
+      "path": "tests/types",
+      "purpose": "Type definitions",
+      "fileCount": 1,
+      "lastAccessed": 1777598322467,
+      "keyFiles": [
+        "domain-types.test.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/operator/simple-operator.ts",
+      "accessCount": 15,
+      "lastAccessed": 1777642939709,
+      "type": "file"
+    },
+    {
+      "path": "tests/operator/simple-operator.test.ts",
+      "accessCount": 13,
+      "lastAccessed": 1777642919276,
+      "type": "file"
+    },
+    {
+      "path": "docs/implementation-log.md",
+      "accessCount": 11,
+      "lastAccessed": 1777643576505,
+      "type": "file"
+    },
+    {
+      "path": "src/dashboard/dashboard-data.ts",
+      "accessCount": 7,
+      "lastAccessed": 1777642979691,
+      "type": "file"
+    },
+    {
+      "path": "CLAUDE.md",
+      "accessCount": 6,
+      "lastAccessed": 1777599163469,
+      "type": "file"
+    },
+    {
+      "path": "tests/dashboard/dashboard-data.test.ts",
+      "accessCount": 6,
+      "lastAccessed": 1777642242465,
+      "type": "file"
+    },
+    {
+      "path": "docs/session-handoff/2026-05-01-open-meteo-429-mitigation.md",
+      "accessCount": 6,
+      "lastAccessed": 1777643576442,
+      "type": "file"
+    },
+    {
+      "path": "src/history/operator-history.ts",
+      "accessCount": 5,
+      "lastAccessed": 1777642874680,
+      "type": "file"
+    },
+    {
+      "path": "tests/history/operator-history.test.ts",
+      "accessCount": 4,
+      "lastAccessed": 1777641460004,
+      "type": "file"
+    },
+    {
+      "path": "app/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1777642276192,
+      "type": "file"
+    },
+    {
+      "path": "tests/app/dashboard-page.test.ts",
+      "accessCount": 4,
+      "lastAccessed": 1777642277385,
+      "type": "file"
+    },
+    {
+      "path": "docs/operator-cycle.md",
+      "accessCount": 4,
+      "lastAccessed": 1777642427163,
+      "type": "file"
+    },
+    {
+      "path": "AGENTS.md",
+      "accessCount": 4,
+      "lastAccessed": 1777643423939,
+      "type": "file"
+    },
+    {
+      "path": "docs/plans/2026-05-01-open-meteo-429-mitigation-plan.md",
+      "accessCount": 3,
+      "lastAccessed": 1777642202322,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 3,
+      "lastAccessed": 1777642874785,
+      "type": "file"
+    },
+    {
+      "path": "vitest.config.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777599007311,
+      "type": "file"
+    },
+    {
+      "path": "tsconfig.json",
+      "accessCount": 2,
+      "lastAccessed": 1777599007522,
+      "type": "file"
+    },
+    {
+      "path": "src/operator/paper-observer-runtime.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777599047548,
+      "type": "file"
+    },
+    {
+      "path": "scripts/paper-observer.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777599047602,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 2,
+      "lastAccessed": 1777599163385,
+      "type": "file"
+    },
+    {
+      "path": "src/weather/open-meteo.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777640661750,
+      "type": "file"
+    },
+    {
+      "path": "src/weather/weather-score.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777641388210,
+      "type": "file"
+    },
+    {
+      "path": "src/ingestion/polymarket.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777642889228,
+      "type": "file"
+    },
+    {
+      "path": "src/weather/forecast-provider.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777642889369,
+      "type": "file"
+    },
+    {
+      "path": "docs/architecture.md",
+      "accessCount": 1,
+      "lastAccessed": 1777598420964,
+      "type": "file"
+    },
+    {
+      "path": "src/operator/market-snapshot.ts",
+      "accessCount": 1,
+      "lastAccessed": 1777598459908,
+      "type": "file"
+    },
+    {
+      "path": "operator-runtime/tmp-fallback-validation.ts",
+      "accessCount": 1,
+      "lastAccessed": 1777643057978,
+      "type": "file"
+    },
+    {
+      "path": "operator-runtime/history-fallback-validation-1777643163553/2026-05-01T19-00-00Z.json",
+      "accessCount": 1,
+      "lastAccessed": 1777643467323,
+      "type": "file"
+    },
+    {
+      "path": "operator-runtime/history-fallback-validation-1777643163553/2026-04-30T18-00-00Z.json",
+      "accessCount": 1,
+      "lastAccessed": 1777643467403,
+      "type": "file"
+    },
+    {
+      "path": "operator-runtime/history-baseline/2026-05-01T14-17-09.206Z.json",
+      "accessCount": 1,
+      "lastAccessed": 1777645253185,
+      "type": "file"
+    },
+    {
+      "path": "operator-runtime/history-min-yes-001/2026-05-01T14-18-52.961Z.json",
+      "accessCount": 1,
+      "lastAccessed": 1777645253284,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
