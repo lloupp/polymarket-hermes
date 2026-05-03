@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it } from 'vitest';
@@ -7,6 +7,7 @@ import {
   buildPaperObserverCliOptions,
   renderPaperObserverCycleSummary,
   runPaperObserverCycle,
+  hydrateWalletFromHistory,
 } from '../../src/operator/paper-observer-runtime';
 
 describe('paper-observer-runtime', () => {
@@ -166,11 +167,195 @@ describe('paper-observer-runtime', () => {
       expect(renderPaperObserverCycleSummary(cycle)).toContain('weather_forecasts=1');
       expect(renderPaperObserverCycleSummary(cycle)).toContain(`history_dir=${historyDir}`);
       expect(renderPaperObserverCycleSummary(cycle)).toContain(`runtime_log_path=${runtimeLogPath}`);
-      expect(renderPaperObserverCycleSummary(cycle)).toContain(
-        `history_file=${join(historyDir, '2026-04-29T10-00-00Z.json')}`,
-      );
+  expect(renderPaperObserverCycleSummary(cycle)).toContain(
+    `history_file=${join(historyDir, '2026-04-29T10-00-00Z.json')}`,
+  );
+  } finally {
+    await rm(runtimeDir, { recursive: true, force: true });
+  }
+  });
+});
+
+describe('hydrateWalletFromHistory', () => {
+  it('returns undefined when historyDir is not provided', async () => {
+    const result = await hydrateWalletFromHistory(undefined);
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when no history files exist', async () => {
+    const historyDir = await mkdtemp(join(tmpdir(), 'polymarket-hydrate-'));
+    try {
+      const result = await hydrateWalletFromHistory(historyDir);
+      expect(result).toBeUndefined();
     } finally {
-      await rm(runtimeDir, { recursive: true, force: true });
+      await rm(historyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns undefined when all positions are CLOSED and no walletSnapshot', async () => {
+    const historyDir = await mkdtemp(join(tmpdir(), 'polymarket-hydrate-'));
+    try {
+      await mkdir(historyDir, { recursive: true });
+      await writeFile(
+        join(historyDir, '2026-04-29T10-00-00Z.json'),
+        JSON.stringify({
+          runAt: '2026-04-29T10:00:00Z',
+          snapshot: { totalMarkets: 1, weatherMarketCount: 1, weatherMarkets: [] },
+          weatherEnrichment: [],
+          decisions: [],
+          executedPositions: [],
+          closedPositions: [],
+          operationalBlocks: [],
+          allPositions: [
+            { id: 'paper-1', marketId: 'm1', outcome: 'YES', entryPrice: 0.4, shares: 10, notional: 4, openedAt: '2026-04-29T10:00:00Z', status: 'CLOSED', exitPrice: 0.6, closedAt: '2026-04-29T12:00:00Z', exitReason: 'take_profit', realizedPnl: 2 },
+          ],
+          outputLines: [],
+        }),
+        'utf8',
+      );
+
+      const result = await hydrateWalletFromHistory(historyDir);
+      expect(result).toBeUndefined();
+    } finally {
+      await rm(historyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('hydrates open positions and wallet snapshot from latest history', async () => {
+    const historyDir = await mkdtemp(join(tmpdir(), 'polymarket-hydrate-'));
+    try {
+      await mkdir(historyDir, { recursive: true });
+      await writeFile(
+        join(historyDir, '2026-04-29T10-00-00Z.json'),
+        JSON.stringify({
+          runAt: '2026-04-29T10:00:00Z',
+          snapshot: { totalMarkets: 1, weatherMarketCount: 1, weatherMarkets: [] },
+          weatherEnrichment: [],
+          decisions: [],
+          executedPositions: [],
+          closedPositions: [],
+          operationalBlocks: [],
+          allPositions: [
+            { id: 'paper-1', marketId: 'm1', outcome: 'YES', entryPrice: 0.4, shares: 10, notional: 4, openedAt: '2026-04-29T10:00:00Z', status: 'OPEN' },
+            { id: 'paper-2', marketId: 'm2', outcome: 'NO', entryPrice: 0.7, shares: 5, notional: 3.5, openedAt: '2026-04-29T10:00:00Z', status: 'CLOSED', exitPrice: 0.5, closedAt: '2026-04-29T12:00:00Z', exitReason: 'take_profit', realizedPnl: 1 },
+          ],
+          outputLines: [],
+          walletSnapshot: { startingCapital: 1000, cash: 996, realizedPnl: 1, openPositions: 1 },
+        }),
+        'utf8',
+      );
+
+      const result = await hydrateWalletFromHistory(historyDir);
+      expect(result).toBeDefined();
+      expect(result!.cash).toBe(996);
+      expect(result!.realizedPnl).toBe(1);
+      expect(result!.openPositions).toHaveLength(1);
+      expect(result!.openPositions[0]!.id).toBe('paper-1');
+      expect(result!.openPositions[0]!.marketId).toBe('m1');
+      expect(result!.openPositions[0]!.status).toBe('OPEN');
+    } finally {
+      await rm(historyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('infers cash from open positions when walletSnapshot is absent', async () => {
+    const historyDir = await mkdtemp(join(tmpdir(), 'polymarket-hydrate-'));
+    try {
+      await mkdir(historyDir, { recursive: true });
+      await writeFile(
+        join(historyDir, '2026-04-29T10-00-00Z.json'),
+        JSON.stringify({
+          runAt: '2026-04-29T10:00:00Z',
+          snapshot: { totalMarkets: 1, weatherMarketCount: 1, weatherMarkets: [] },
+          weatherEnrichment: [],
+          decisions: [],
+          executedPositions: [],
+          closedPositions: [],
+          operationalBlocks: [],
+          allPositions: [
+            { id: 'paper-1', marketId: 'm1', outcome: 'YES', entryPrice: 0.4, shares: 10, notional: 4, openedAt: '2026-04-29T10:00:00Z', status: 'OPEN' },
+          ],
+          outputLines: [],
+          // No walletSnapshot — legacy format
+        }),
+        'utf8',
+      );
+
+      const result = await hydrateWalletFromHistory(historyDir);
+      expect(result).toBeDefined();
+      // Cash is inferred: 1000 (fallback startingCapital) - 4 (notional) = 996
+      expect(result!.cash).toBeCloseTo(996, 8);
+      expect(result!.realizedPnl).toBe(0);
+      expect(result!.openPositions).toHaveLength(1);
+    } finally {
+      await rm(historyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('returns undefined on corrupted history file and logs warning', async () => {
+    const historyDir = await mkdtemp(join(tmpdir(), 'polymarket-hydrate-'));
+    try {
+      await mkdir(historyDir, { recursive: true });
+      await writeFile(
+        join(historyDir, '2026-04-29T10-00-00Z.json'),
+        'not valid json{{{',
+        'utf8',
+      );
+
+      const result = await hydrateWalletFromHistory(historyDir);
+      expect(result).toBeUndefined();
+    } finally {
+      await rm(historyDir, { recursive: true, force: true });
+    }
+  });
+
+  it('reads the latest history file when multiple exist', async () => {
+    const historyDir = await mkdtemp(join(tmpdir(), 'polymarket-hydrate-'));
+    try {
+      await mkdir(historyDir, { recursive: true });
+
+      // Older file with closed position
+      await writeFile(
+        join(historyDir, '2026-04-28T10-00-00Z.json'),
+        JSON.stringify({
+          runAt: '2026-04-28T10:00:00Z',
+          snapshot: { totalMarkets: 0, weatherMarketCount: 0, weatherMarkets: [] },
+          weatherEnrichment: [],
+          decisions: [],
+          executedPositions: [],
+          closedPositions: [],
+          operationalBlocks: [],
+          allPositions: [],
+          outputLines: [],
+        }),
+        'utf8',
+      );
+
+      // Newer file with open position
+      await writeFile(
+        join(historyDir, '2026-04-29T10-00-00Z.json'),
+        JSON.stringify({
+          runAt: '2026-04-29T10:00:00Z',
+          snapshot: { totalMarkets: 1, weatherMarketCount: 1, weatherMarkets: [] },
+          weatherEnrichment: [],
+          decisions: [],
+          executedPositions: [],
+          closedPositions: [],
+          operationalBlocks: [],
+          allPositions: [
+            { id: 'paper-1', marketId: 'm-newest', outcome: 'YES', entryPrice: 0.3, shares: 20, notional: 6, openedAt: '2026-04-29T10:00:00Z', status: 'OPEN' },
+          ],
+          outputLines: [],
+          walletSnapshot: { startingCapital: 1000, cash: 994, realizedPnl: 0, openPositions: 1 },
+        }),
+        'utf8',
+      );
+
+      const result = await hydrateWalletFromHistory(historyDir);
+      expect(result).toBeDefined();
+      expect(result!.openPositions[0]!.marketId).toBe('m-newest');
+    } finally {
+      await rm(historyDir, { recursive: true, force: true });
     }
   });
 });

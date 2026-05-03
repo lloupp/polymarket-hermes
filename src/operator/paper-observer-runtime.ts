@@ -4,8 +4,10 @@ import {
   runSimpleWeatherOperator,
   type RunSimpleWeatherOperatorOptions,
   type SimpleWeatherOperatorResult,
+  type WalletHydrationState,
   type WeatherLocationConfig,
 } from './simple-operator';
+import { readLatestOperatorHistory } from '../history/operator-history';
 
 export interface PaperObserverCliOptions extends RunSimpleWeatherOperatorOptions {
   once: boolean;
@@ -13,6 +15,7 @@ export interface PaperObserverCliOptions extends RunSimpleWeatherOperatorOptions
   intervalMs: number;
   historyDir?: string;
   runtimeLogPath?: string;
+  marketResolutionFetcher?: (marketId: string) => Promise<unknown>;
 }
 
 export interface PaperObserverCycleRecord {
@@ -153,10 +156,52 @@ async function appendCycleRecord(runtimeLogPath: string, record: PaperObserverCy
   await appendFile(runtimeLogPath, `${JSON.stringify(record)}\n`, 'utf8');
 }
 
+export async function hydrateWalletFromHistory(historyDir?: string): Promise<WalletHydrationState | undefined> {
+  if (!historyDir) {
+    return undefined;
+  }
+
+  try {
+    const latest = await readLatestOperatorHistory(historyDir);
+    if (!latest) {
+      return undefined;
+    }
+
+    const { record } = latest;
+    const openPositions = record.allPositions.filter((p) => p.status === 'OPEN');
+
+    if (openPositions.length === 0 && !record.walletSnapshot) {
+      return undefined;
+    }
+
+    // If walletSnapshot exists (new format), use it for cash + realizedPnl
+    // Otherwise, infer cash from startingCapital minus open position notionals
+    const walletSnap = record.walletSnapshot;
+    const cash = walletSnap?.cash
+      ?? (record.allPositions.filter((p) => p.status === 'OPEN').reduce(
+        (remaining, p) => remaining - p.notional,
+        1000, // fallback startingCapital
+      ));
+    const realizedPnl = walletSnap?.realizedPnl ?? 0;
+
+    if (openPositions.length === 0 && walletSnap && walletSnap.openPositions === 0) {
+      return undefined;
+    }
+
+    return { cash, realizedPnl, openPositions };
+  } catch (error) {
+    console.warn('[hydrateWalletFromHistory] failed to read history, starting fresh:', (error as Error).message);
+    return undefined;
+  }
+}
+
 export async function runPaperObserverCycle(
-  options: Omit<PaperObserverCliOptions, 'once' | 'cycles' | 'intervalMs'> & { nowIso?: string },
+  options: Omit<PaperObserverCliOptions, 'once' | 'cycles' | 'intervalMs'> & { nowIso?: string; walletHydration?: WalletHydrationState },
 ): Promise<PaperObserverCycleResult> {
   const runAt = options.nowIso ?? new Date().toISOString();
+
+  const walletHydration = options.walletHydration ?? await hydrateWalletFromHistory(options.historyDir);
+
   const result = await runSimpleWeatherOperator({
     startingCapital: options.startingCapital,
     marketLimit: options.marketLimit,
@@ -171,12 +216,14 @@ export async function runPaperObserverCycle(
     nowIso: runAt,
     historyDir: options.historyDir,
     seedPositions: options.seedPositions,
+    walletHydration,
     weatherLocations: options.weatherLocations,
     searchQueries: options.searchQueries,
     gammaFetcher: options.gammaFetcher,
     publicSearchFetcher: options.publicSearchFetcher,
     weatherFetcher: options.weatherFetcher,
     forecastProvider: options.forecastProvider,
+    marketResolutionFetcher: options.marketResolutionFetcher,
   });
 
   const record = buildCycleRecord(runAt, result);

@@ -1,7 +1,40 @@
 # Operator cycle
 
 ## Estado atual
-Fluxo do observer mantido, com dashboard operacional lendo o último histórico salvo por padrão e opção explícita de execução live pela UI. O enrichment de forecast agora diferencia origem `live` de `history_fallback` quando o Open-Meteo responde com rate limit.
+O observer paper-first agora suporta notificações Telegram opcionais. O fluxo do ciclo é inalterado quando o Telegram está desativado. Quando habilitado, o operador envia alertas em 4 pontos: início, resumo de ciclo, sinais aprovados (batched) e erro crítico.
+
+## Mudança operacional aplicada — Telegram notifications
+- Novo módulo `src/notifications/telegram.ts` com config via env vars, sender tolerante a falhas e formatadores de mensagem.
+- `scripts/paper-observer.ts` carrega `dotenv/config` no topo e instancia o notifier.
+- Alertas enviados:
+  1. **Início do operador**: mensagem de cycle start.
+  2. **Fim de ciclo**: resumo com mercados, sinais, posições.
+  3. **Sinais aprovados**: agrupados em uma mensagem por ciclo (anti-spam).
+  4. **Erro crítico**: capturado no catch do main loop.
+- Variáveis de ambiente: `TELEGRAM_ENABLED`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+- Se `TELEGRAM_ENABLED` não estiver `true` ou se faltar token/chat_id, o operador continua sem enviar nada.
+- Falhas de rede ou API do Telegram são logadas mas não derrubam o ciclo.
+- Token é mascarado nos logs (parcialmente visível para debug).
+
+## Como isso aparece operacionalmente
+- Com Telegram desabilitado (padrão):
+  - Log: `[telegram] notifications disabled`
+  - Zero chamadas à API do Telegram
+- Com Telegram habilitado e configurado:
+  - Log: `[telegram] notifications enabled (token=1234...EF)`
+  - 2-3 mensagens por ciclo (start + summary + signals se houver)
+  - Falha no Telegram: log de erro, ciclo continua normal
+- Com Telegram habilitado mas sem token/chat_id:
+  - Log: `[telegram] TELEGRAM_ENABLED=true but TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is missing`
+  - Notifier é automaticamente desabilitado, ciclo continua
+
+## Impacto operacional do Telegram
+- Zero impacto no fluxo de ingestão, scoring, posição ou dashboard.
+- Zero impacto em decisão/sinal/risk/execution.
+- Dependência adicionada: `dotenv` (leve, padrão Node.js).
+- O envio de mensagens é fire-and-forget: `await notifier.send(...)` não bloqueia o próximo ciclo em caso de timeout lento (o fetch tem timeout natural da plataforma).
+
+## Registro anterior — Mitigação de Open-Meteo 429
 
 ## Mudança operacional aplicada ao forecast em 429
 - `src/weather/open-meteo.ts` classifica rate limit como `open_meteo_rate_limited`.

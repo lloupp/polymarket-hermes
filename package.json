@@ -11,12 +11,14 @@
     "operator:paper": "npx tsx scripts/paper-observer.ts"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "next": "^16.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"

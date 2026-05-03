@@ -1,7 +1,7 @@
 export type MarketSignal = 'BUY_YES' | 'BUY_NO' | 'HOLD';
 export type PositionOutcome = 'YES' | 'NO';
 export type PositionStatus = 'OPEN' | 'CLOSED';
-export type PositionExitReason = 'take_profit' | 'timeout' | 'manual';
+export type PositionExitReason = 'take_profit' | 'timeout' | 'manual' | 'market_resolved' | 'market_expired';
 export type OperationalBlockReason = 'blocked_by_min_yes_price' | 'blocked_by_min_repricing_edge';
 
 export type MarketDiscoverySource = 'base' | 'public_search';

@@ -1,5 +1,44 @@
 # Implementation log
 
+## 2026-05-02 — Telegram notifications for paper observer
+
+### O que foi criado/adaptado
+- Criado `src/notifications/telegram.ts` com módulo isolado para notificações Telegram: config, env loader, sender, formatters e notifier interface.
+- Adaptado `scripts/paper-observer.ts` para carregar `dotenv/config`, instanciar o Telegram notifier e enviar alertas nos pontos corretos do ciclo:
+  - Início do operador (cycle start).
+  - Resumo ao fim de cada ciclo (markets, signals, positions).
+  - Sinais aprovados em lote (batched para evitar spam).
+  - Erro crítico no catch do ciclo.
+- Criado `.env.example` com as 3 variáveis Telegram documentadas.
+- Adicionado `dotenv` como dependência para carregamento de `.env`.
+- Adicionado `@types/node` como devDependency (build anterior falhava sem ele).
+- Adicionado `operator-runtime/` ao `.gitignore`.
+- Criado `tests/notifications/telegram.test.ts` com 23 testes cobrindo:
+  - Config desativada não envia nada.
+  - Falta de token/chat_id não quebra execução.
+  - Envio bem-sucedido chama a API correta.
+  - Falha de API (429) é capturada e não derruba o operador.
+  - Falha de rede (ECONNREFUSED) é capturada.
+  - Formatação de mensagens (cycle start, summary, signal, batch, critical error).
+
+### O que já funciona
+- Telegram desativado (padrão): operador roda normalmente sem enviar mensagens.
+- Telegram habilitado com token/chat_id: envia alertas por ciclo sem bloquear o loop principal.
+- Erros de rede ou API do Telegram são capturados e logados, sem derrubar o operador.
+- Token é mascarado nos logs (mostra apenas primeiros/últimos 4 chars).
+- Sinais múltiplos são agrupados em uma única mensagem por ciclo (anti-spam).
+- `.env` já estava no `.gitignore`; `.env.example` criado como referência.
+
+### Resultado atual de testes/build
+- `npm test`: 17 arquivos, 107 testes, todos passando.
+- `npm run build`: concluído com sucesso via `tsc -p tsconfig.json`.
+- `npm run operator:paper -- --once`: executado com sucesso, output mostra `[telegram] notifications disabled` quando vars não configuradas.
+
+### Próximos passos sugeridos
+- Configurar TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no `.env` local para validar envio real.
+- Considerar adicionar alerta de rate limit do Open-Meteo (quando `forecast_rate_limits > 0`).
+- Considerar adicionar alerta de posição paper fechada (take_profit/timeout).
+
 ## 2026-05-01 — Mitigação de Open-Meteo 429 com fallback auditável
 
 ### O que foi criado/adaptado

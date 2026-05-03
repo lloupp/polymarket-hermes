@@ -3,6 +3,9 @@ import type { PaperWalletSnapshot } from '../types/paper';
 
 export interface PaperWalletOptions {
   startingCapital: number;
+  initialCash?: number;
+  initialRealizedPnl?: number;
+  initialPositions?: PaperPosition[];
 }
 
 export interface OpenPositionInput {
@@ -27,12 +30,17 @@ export class PaperWallet {
   private positions: PaperPosition[];
   private nextId: number;
 
-  constructor({ startingCapital }: PaperWalletOptions) {
+  constructor({ startingCapital, initialCash, initialRealizedPnl, initialPositions }: PaperWalletOptions) {
     this.startingCapital = startingCapital;
-    this.cash = startingCapital;
-    this.realizedPnl = 0;
-    this.positions = [];
-    this.nextId = 1;
+    this.cash = initialCash ?? startingCapital;
+    this.realizedPnl = initialRealizedPnl ?? 0;
+    this.positions = initialPositions ? initialPositions.map((p) => ({ ...p })) : [];
+    this.nextId = this.positions.length > 0
+      ? Math.max(...this.positions.map((p) => {
+          const match = p.id.match(/^paper-(\d+)$/);
+          return match ? Number(match[1]) : 0;
+        })) + 1
+      : 1;
   }
 
   snapshot(): PaperWalletSnapshot {
@@ -46,6 +54,10 @@ export class PaperWallet {
 
   listPositions(): PaperPosition[] {
     return this.positions.map((position) => ({ ...position }));
+  }
+
+  getCash(): number {
+    return this.cash;
   }
 
   openPosition(input: OpenPositionInput): PaperPosition {

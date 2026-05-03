@@ -14,6 +14,13 @@ export interface OperatorHistoryOperationalBlock {
   decisionEdge: number;
 }
 
+export interface WalletStateSnapshot {
+  startingCapital: number;
+  cash: number;
+  realizedPnl: number;
+  openPositions: number;
+}
+
 export interface WriteOperatorHistoryInput {
   historyDir: string;
   runAt: string;
@@ -25,6 +32,7 @@ export interface WriteOperatorHistoryInput {
   operationalBlocks: OperatorHistoryOperationalBlock[];
   allPositions: PaperPosition[];
   outputLines: string[];
+  walletSnapshot?: WalletStateSnapshot;
 }
 
 export interface OperatorHistoryRecord {
@@ -37,6 +45,7 @@ export interface OperatorHistoryRecord {
   operationalBlocks: OperatorHistoryOperationalBlock[];
   allPositions: PaperPosition[];
   outputLines: string[];
+  walletSnapshot?: WalletStateSnapshot;
 }
 
 export interface LatestOperatorHistory {
@@ -79,6 +88,7 @@ export async function writeOperatorHistory(input: WriteOperatorHistoryInput): Pr
     operationalBlocks: input.operationalBlocks,
     allPositions: input.allPositions,
     outputLines: input.outputLines,
+    walletSnapshot: input.walletSnapshot,
   };
 
   const filePath = join(input.historyDir, buildHistoryFilename(input.runAt));
