@@ -95,6 +95,7 @@ describe('normalizeGammaMarket', () => {
       outcomes: '["Yes","No"]',
       outcomePrices: '["0.41","0.59"]',
       category: 'weather',
+      closed: true,
     };
 
     expect(normalizeGammaMarket(raw)).toEqual({
@@ -108,6 +109,7 @@ describe('normalizeGammaMarket', () => {
       volume24h: 8123.55,
       closesAt: '2026-01-01T00:00:00Z',
       tags: ['weather', 'snow'],
+      closed: true,
     });
   });
 
@@ -141,8 +143,11 @@ describe('normalizeGammaMarket', () => {
 });
 
 describe('extractGammaMarketsFromPublicSearch', () => {
-  it('flattens open search markets and ignores closed or inactive entries', () => {
-    expect(extractGammaMarketsFromPublicSearch(publicSearchPayload)).toEqual([openWeatherSearchMarket]);
+  it('flattens active search markets and keeps closed entries for position settlement', () => {
+    expect(extractGammaMarketsFromPublicSearch(publicSearchPayload)).toEqual([
+      openWeatherSearchMarket,
+      closedWeatherSearchMarket,
+    ]);
   });
 
   it('returns empty array for unexpected payloads', () => {

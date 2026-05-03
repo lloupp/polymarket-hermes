@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run operator:paper -- --once` — run one paper observer cycle.
 - `npm run operator:paper -- --cycles <n> --interval-ms <ms>` — run repeated paper observer cycles.
 
-Useful paper observer flags include `--market-limit`, `--forecast-days`, `--min-edge`, `--kelly-fraction`, `--max-position-usd`, `--min-yes-price`, `--min-repricing-edge`, `--take-profit-pct`, `--max-holding-hours`, `--history-dir`, `--runtime-log-path`, `--ndjson-log`, and repeated `--search-query` values.
+Useful paper observer flags include `--market-limit`, `--forecast-days`, `--min-edge`, `--kelly-fraction`, `--max-position-usd`, `--min-yes-price`, `--min-repricing-edge`, `--take-profit-pct`, `--max-holding-hours`, `--history-dir`, `--runtime-log-path`, `--ndjson-log`, `--wallet-state-path`, and repeated `--search-query` values.
 
 ## Architecture overview
 

@@ -95,8 +95,7 @@ describe('PaperWallet', () => {
     it('restores cash and realizedPnl from initial state', () => {
       const wallet = new PaperWallet({
         startingCapital: 1000,
-        initialCash: 800,
-        initialRealizedPnl: 50,
+        state: { startingCapital: 1000, cash: 800, realizedPnl: 50, positions: [], nextId: 1 },
       });
 
       expect(wallet.snapshot()).toEqual({
@@ -121,9 +120,7 @@ describe('PaperWallet', () => {
 
       const wallet = new PaperWallet({
         startingCapital: 1000,
-        initialCash: 996,
-        initialRealizedPnl: 0,
-        initialPositions: [openPosition],
+        state: { startingCapital: 1000, cash: 996, realizedPnl: 0, positions: [openPosition], nextId: 2 },
       });
 
       expect(wallet.snapshot()).toEqual({
@@ -153,8 +150,7 @@ describe('PaperWallet', () => {
 
       const wallet = new PaperWallet({
         startingCapital: 1000,
-        initialCash: 994,
-        initialPositions: [openPosition],
+        state: { startingCapital: 1000, cash: 994, realizedPnl: 0, positions: [openPosition], nextId: 6 },
       });
 
       // Next position should get ID paper-6
@@ -184,8 +180,7 @@ describe('PaperWallet', () => {
 
       const wallet = new PaperWallet({
         startingCapital: 1000,
-        initialCash: 996,
-        initialPositions: [openPosition],
+        state: { startingCapital: 1000, cash: 996, realizedPnl: 0, positions: [openPosition], nextId: 2 },
       });
 
       const closed = wallet.closePosition({
@@ -216,8 +211,7 @@ describe('PaperWallet', () => {
       const original = [openPosition];
       const wallet = new PaperWallet({
         startingCapital: 1000,
-        initialCash: 996,
-        initialPositions: original,
+        state: { startingCapital: 1000, cash: 996, realizedPnl: 0, positions: original, nextId: 2 },
       });
 
       // Closing should not affect the original array

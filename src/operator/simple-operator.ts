@@ -1,10 +1,11 @@
 import { buildDashboardViewModel, type DashboardViewModel } from '../dashboard/view-model';
 import { readLatestForecastFallback, writeOperatorHistory } from '../history/operator-history';
 import { fetchGammaMarkets } from '../ingestion/polymarket';
-import { fetchMarketResolutions, getResolutionExitPrice, type MarketResolution } from '../ingestion/market-resolution';
+
 import { buildMarketSnapshot, type MarketSnapshot } from './market-snapshot';
 import { PaperWallet } from '../paper/paper-wallet';
 import type { OperationalBlockReason, PaperPosition, PositionOutcome } from '../types/market';
+import type { PaperWalletState } from '../types/paper';
 import {
   openMeteoForecastProvider,
   type WeatherForecastProvider,
@@ -49,11 +50,7 @@ export interface SeedPaperPositionInput {
   openedAt: string;
 }
 
-export interface WalletHydrationState {
-  cash: number;
-  realizedPnl: number;
-  openPositions: PaperPosition[];
-}
+
 
 export interface RunSimpleWeatherOperatorOptions {
   startingCapital: number;
@@ -69,15 +66,14 @@ export interface RunSimpleWeatherOperatorOptions {
   nowIso?: string;
   historyDir?: string;
   seedPositions?: SeedPaperPositionInput[];
-  walletHydration?: WalletHydrationState;
+  walletState?: PaperWalletState;
   weatherLocations: WeatherLocationConfig[];
   searchQueries?: string[];
   gammaFetcher?: () => Promise<unknown>;
   publicSearchFetcher?: (query: string) => Promise<unknown>;
   weatherFetcher?: () => Promise<unknown>;
   forecastProvider?: WeatherForecastProvider;
-  /** Custom fetcher for market resolution status (for testing). Defaults to Gamma API. */
-  marketResolutionFetcher?: (marketId: string) => Promise<unknown>;
+
 }
 
 export interface OperationalBlock {
@@ -98,6 +94,7 @@ export interface SimpleWeatherOperatorResult {
   dashboard: DashboardViewModel;
   outputLines: string[];
   historyFilePath?: string;
+  walletState: PaperWalletState;
 }
 
 async function enrichWeatherMarkets(
@@ -332,7 +329,7 @@ function executePaperPositions(input: {
 
     const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === decision.marketId);
 
-    if (!market || market.yesPrice <= 0) {
+    if (!market || market.yesPrice <= 0 || market.closed === true) {
       continue;
     }
 
@@ -409,61 +406,46 @@ function closePaperPositions(input: {
   nowIso?: string;
   takeProfitPct?: number;
   maxHoldingHours?: number;
-  marketResolutions?: Map<string, MarketResolution>;
+  
 }): PaperPosition[] {
-  const { nowIso, takeProfitPct, maxHoldingHours, marketResolutions } = input;
+  const { nowIso, takeProfitPct, maxHoldingHours } = input;
+
+  if (!nowIso) {
+    return [];
+  }
+
   const closed: PaperPosition[] = [];
-  const nowMs = nowIso ? Date.parse(nowIso) : Date.now();
+  const nowMs = Date.parse(nowIso);
 
   for (const position of input.wallet.listPositions()) {
     if (position.status !== 'OPEN') {
       continue;
     }
 
-    // 1. Check if the market has resolved — this takes priority over take-profit/timeout
-    const resolution = marketResolutions?.get(position.marketId);
-    if (resolution?.closed && resolution.winningOutcome) {
-      const exitPrice = getResolutionExitPrice(position.outcome, resolution);
-      if (exitPrice !== undefined) {
-        closed.push(
-          input.wallet.closePosition({
-            positionId: position.id,
-            exitPrice,
-            closedAt: nowIso ?? new Date().toISOString(),
-            exitReason: 'market_resolved',
-          }),
-        );
-        continue;
-      }
+    const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === position.marketId);
+
+    // 1. Check if the market has expired (closesAt in the past) — close at current price
+    if (market?.closesAt && Date.parse(market.closesAt) < nowMs) {
+      const exitPrice = position.outcome === 'YES' ? market.yesPrice : market.noPrice;
+      closed.push(
+        input.wallet.closePosition({
+          positionId: position.id,
+          exitPrice: exitPrice > 0 ? exitPrice : 0.001, // avoid zero exit price
+          closedAt: nowIso,
+          exitReason: 'market_expired',
+        }),
+      );
+      continue;
     }
 
-    // 1b. Check if the market has expired (closesAt in the past) — close at current price
-    // Only check when nowIso is provided to avoid false positives in tests without clock control
-    if (nowIso) {
-      const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === position.marketId);
-      if (market?.closesAt && Date.parse(market.closesAt) < nowMs) {
-        const exitPrice = position.outcome === 'YES' ? market.yesPrice : market.noPrice;
-        closed.push(
-          input.wallet.closePosition({
-            positionId: position.id,
-            exitPrice: exitPrice > 0 ? exitPrice : 0.001, // avoid zero exit price
-            closedAt: nowIso,
-            exitReason: 'market_expired',
-          }),
-        );
-        continue;
-      }
+    // 2. Check take-profit and timeout (requires takeProfitPct and maxHoldingHours)
+    if (takeProfitPct === undefined || maxHoldingHours === undefined) {
+      continue;
     }
 
-  // 2. Check take-profit and timeout (requires nowIso, takeProfitPct, maxHoldingHours)
-  if (!nowIso || takeProfitPct === undefined || maxHoldingHours === undefined) {
-    continue;
-  }
-
-  const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === position.marketId);
-  if (!market) {
-    continue;
-  }
+    if (!market) {
+      continue;
+    }
 
     const takeProfitHit = shouldTakeProfit(position, market, takeProfitPct);
     const timeoutHit = shouldTimeout(position, nowIso, maxHoldingHours);
@@ -593,14 +575,8 @@ function formatDecisionLine(decision: WeatherMarketDecision): string {
 export async function runSimpleWeatherOperator(
   options: RunSimpleWeatherOperatorOptions,
 ): Promise<SimpleWeatherOperatorResult> {
-  const hydration = options.walletHydration;
-  const wallet = hydration
-    ? new PaperWallet({
-        startingCapital: options.startingCapital,
-        initialCash: hydration.cash,
-        initialRealizedPnl: hydration.realizedPnl,
-        initialPositions: hydration.openPositions,
-      })
+  const wallet = options.walletState
+    ? new PaperWallet({ startingCapital: options.startingCapital, state: options.walletState })
     : new PaperWallet({ startingCapital: options.startingCapital });
   seedPaperPositions(wallet, options.seedPositions);
 
@@ -633,31 +609,13 @@ export async function runSimpleWeatherOperator(
     minRepricingEdge: options.minRepricingEdge,
   });
 
-  // Fetch market resolutions for all open positions
-  const openPositions = wallet.listPositions().filter((p) => p.status === 'OPEN');
-  const openMarketIds = [...new Set(openPositions.map((p) => p.marketId))];
-  let marketResolutions: Map<string, MarketResolution> = new Map();
-
-  if (openMarketIds.length > 0) {
-    try {
-      marketResolutions = await fetchMarketResolutions(openMarketIds, {
-        fetcher: options.marketResolutionFetcher,
-      });
-    } catch (error) {
-      console.warn(
-        `[simple-operator] failed to fetch market resolutions: ${(error as Error)?.message ?? String(error)}`,
-      );
-    }
-  }
-
   const closedPositions = closePaperPositions({
-    wallet,
-    snapshot,
-    nowIso: options.nowIso,
-    takeProfitPct: options.takeProfitPct,
-    maxHoldingHours: options.maxHoldingHours,
-    marketResolutions,
-  });
+      wallet,
+      snapshot,
+      nowIso: options.nowIso,
+      takeProfitPct: options.takeProfitPct,
+      maxHoldingHours: options.maxHoldingHours,
+    });
   const approvedSignals = decisions.filter((decision) => decision.signal !== 'HOLD').length;
   const blockedSignals = decisions.length - approvedSignals;
 
@@ -712,6 +670,7 @@ export async function runSimpleWeatherOperator(
     dashboard,
     outputLines,
     historyFilePath,
+    walletState: wallet.exportState(),
   } satisfies SimpleWeatherOperatorResult;
 
   return result;
