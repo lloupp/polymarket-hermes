@@ -1,8 +1,9 @@
 import type { PaperPosition, PositionExitReason, PositionOutcome } from '../types/market';
-import type { PaperWalletSnapshot } from '../types/paper';
+import type { PaperWalletSnapshot, PaperWalletState } from '../types/paper';
 
 export interface PaperWalletOptions {
   startingCapital: number;
+  state?: PaperWalletState;
 }
 
 export interface OpenPositionInput {
@@ -27,12 +28,12 @@ export class PaperWallet {
   private positions: PaperPosition[];
   private nextId: number;
 
-  constructor({ startingCapital }: PaperWalletOptions) {
-    this.startingCapital = startingCapital;
-    this.cash = startingCapital;
-    this.realizedPnl = 0;
-    this.positions = [];
-    this.nextId = 1;
+  constructor({ startingCapital, state }: PaperWalletOptions) {
+    this.startingCapital = state?.startingCapital ?? startingCapital;
+    this.cash = state?.cash ?? startingCapital;
+    this.realizedPnl = state?.realizedPnl ?? 0;
+    this.positions = state?.positions.map((position) => ({ ...position })) ?? [];
+    this.nextId = state?.nextId ?? 1;
   }
 
   snapshot(): PaperWalletSnapshot {
@@ -46,6 +47,16 @@ export class PaperWallet {
 
   listPositions(): PaperPosition[] {
     return this.positions.map((position) => ({ ...position }));
+  }
+
+  exportState(): PaperWalletState {
+    return {
+      startingCapital: this.startingCapital,
+      cash: this.cash,
+      realizedPnl: this.realizedPnl,
+      positions: this.listPositions(),
+      nextId: this.nextId,
+    };
   }
 
   openPosition(input: OpenPositionInput): PaperPosition {

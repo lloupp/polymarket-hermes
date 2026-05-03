@@ -17,6 +17,7 @@ describe('paper-observer-runtime', () => {
       '--interval-ms=2500',
       '--history-dir=/tmp/history',
       '--runtime-log-path=/tmp/runtime.ndjson',
+      '--wallet-state-path=/tmp/paper-wallet.json',
       '--starting-capital=250',
       '--market-limit=12',
       '--forecast-days=3',
@@ -37,6 +38,7 @@ describe('paper-observer-runtime', () => {
       intervalMs: 2500,
       historyDir: '/tmp/history',
       runtimeLogPath: '/tmp/runtime.ndjson',
+      walletStatePath: '/tmp/paper-wallet.json',
       startingCapital: 250,
       marketLimit: 12,
       forecastDays: 3,
@@ -84,6 +86,82 @@ describe('paper-observer-runtime', () => {
       'temperature in london',
       'temperature in seoul',
     ]);
+  });
+
+  it('persists wallet state across observer cycles', async () => {
+    const runtimeDir = await mkdtemp(join(tmpdir(), 'polymarket-paper-wallet-'));
+    const historyDir = join(runtimeDir, 'history');
+    const walletStatePath = join(runtimeDir, 'paper-wallet.json');
+    const gammaPayload: GammaMarketRecord[] = [
+      {
+        id: '2091487',
+        slug: 'highest-temperature-in-london-on-april-29-2026-15c',
+        question: 'Will the highest temperature in London be 15°C on April 29?',
+        endDate: '2026-04-29T12:00:00Z',
+        liquidity: '15000',
+        volume24hr: '4000',
+        tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'temperature', label: 'Temperature' }],
+        outcomes: '["Yes","No"]',
+        outcomePrices: '["0.21","0.79"]',
+        category: 'weather',
+      },
+    ];
+
+    try {
+      const baseOptions = {
+        historyDir,
+        walletStatePath,
+        startingCapital: 1000,
+        marketLimit: 10,
+        forecastDays: 1,
+        minEdge: 0.03,
+        kellyFraction: 0.5,
+        maxPositionUsd: 100,
+        takeProfitPct: 0.2,
+        maxHoldingHours: 24,
+        weatherLocations: [],
+        searchQueries: ['highest temperature in'],
+        gammaFetcher: async () => [],
+        publicSearchFetcher: async () => ({ events: [{ markets: gammaPayload }] }),
+        weatherFetcher: async () => ({
+          latitude: 51.5072,
+          longitude: -0.1276,
+          timezone: 'Europe/London',
+          daily: {
+            time: ['2026-04-29'],
+            temperature_2m_max: [15],
+            temperature_2m_min: [8],
+            precipitation_probability_max: [20],
+            precipitation_sum: [0],
+            wind_speed_10m_max: [18],
+          },
+        }),
+      };
+
+      const firstCycle = await runPaperObserverCycle({
+        ...baseOptions,
+        nowIso: '2026-04-29T10:00:00Z',
+      });
+      const secondCycle = await runPaperObserverCycle({
+        ...baseOptions,
+        nowIso: '2026-04-29T10:05:00Z',
+      });
+
+      expect(firstCycle.record.positionsOpened).toBe(1);
+      expect(secondCycle.record.positionsOpened).toBe(0);
+      expect(secondCycle.result.dashboard.summaryCards[3]).toEqual({ label: 'Open Positions', value: '1' });
+
+      const walletState = JSON.parse(await readFile(walletStatePath, 'utf8'));
+      expect(walletState.positions).toEqual([
+        expect.objectContaining({
+          marketId: '2091487',
+          outcome: 'YES',
+          status: 'OPEN',
+        }),
+      ]);
+    } finally {
+      await rm(runtimeDir, { recursive: true, force: true });
+    }
   });
 
   it('runs one observer cycle and appends auditable NDJSON output', async () => {

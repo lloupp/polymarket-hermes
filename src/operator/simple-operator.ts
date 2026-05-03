@@ -4,6 +4,7 @@ import { fetchGammaMarkets } from '../ingestion/polymarket';
 import { buildMarketSnapshot, type MarketSnapshot } from './market-snapshot';
 import { PaperWallet } from '../paper/paper-wallet';
 import type { OperationalBlockReason, PaperPosition } from '../types/market';
+import type { PaperWalletState } from '../types/paper';
 import {
   openMeteoForecastProvider,
   type WeatherForecastProvider,
@@ -62,6 +63,7 @@ export interface RunSimpleWeatherOperatorOptions {
   nowIso?: string;
   historyDir?: string;
   seedPositions?: SeedPaperPositionInput[];
+  walletState?: PaperWalletState;
   weatherLocations: WeatherLocationConfig[];
   searchQueries?: string[];
   gammaFetcher?: () => Promise<unknown>;
@@ -88,6 +90,7 @@ export interface SimpleWeatherOperatorResult {
   dashboard: DashboardViewModel;
   outputLines: string[];
   historyFilePath?: string;
+  walletState: PaperWalletState;
 }
 
 async function enrichWeatherMarkets(
@@ -299,6 +302,12 @@ function executePaperPositions(input: {
 }): { executedPositions: PaperPosition[]; operationalBlocks: OperationalBlock[] } {
   const executedPositions: PaperPosition[] = [];
   const operationalBlocks: OperationalBlock[] = [];
+  const openMarketIds = new Set(
+    input.wallet
+      .listPositions()
+      .filter((position) => position.status === 'OPEN')
+      .map((position) => position.marketId),
+  );
   const minYesPrice = input.minYesPrice ?? 0;
   const minRepricingEdge = input.minRepricingEdge ?? 0;
 
@@ -309,7 +318,11 @@ function executePaperPositions(input: {
 
     const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === decision.marketId);
 
-    if (!market || market.yesPrice <= 0) {
+    if (!market || market.yesPrice <= 0 || market.closed === true) {
+      continue;
+    }
+
+    if (openMarketIds.has(market.id)) {
       continue;
     }
 
@@ -347,6 +360,7 @@ function executePaperPositions(input: {
     });
 
     executedPositions.push(position);
+    openMarketIds.add(market.id);
   }
 
   return { executedPositions, operationalBlocks };
@@ -358,8 +372,12 @@ function seedPaperPositions(wallet: PaperWallet, seedPositions: SeedPaperPositio
   }
 }
 
+function resolvePositionExitPrice(position: PaperPosition, market: { yesPrice: number; noPrice: number }): number {
+  return position.outcome === 'YES' ? market.yesPrice : market.noPrice;
+}
+
 function shouldTakeProfit(position: PaperPosition, market: { yesPrice: number; noPrice: number }, takeProfitPct: number): boolean {
-  const currentPrice = position.outcome === 'YES' ? market.yesPrice : market.noPrice;
+  const currentPrice = resolvePositionExitPrice(position, market);
   return currentPrice >= position.entryPrice * (1 + takeProfitPct);
 }
 
@@ -397,15 +415,16 @@ function closePaperPositions(input: {
       continue;
     }
 
-    const takeProfitHit = shouldTakeProfit(position, market, takeProfitPct);
-    const timeoutHit = shouldTimeout(position, nowIso, maxHoldingHours);
+    const resolutionHit = market.closed === true;
+    const takeProfitHit = !resolutionHit && shouldTakeProfit(position, market, takeProfitPct);
+    const timeoutHit = !resolutionHit && shouldTimeout(position, nowIso, maxHoldingHours);
 
-    if (!takeProfitHit && !timeoutHit) {
+    if (!resolutionHit && !takeProfitHit && !timeoutHit) {
       continue;
     }
 
-    const exitPrice = position.outcome === 'YES' ? market.yesPrice : market.noPrice;
-    const exitReason = takeProfitHit ? 'take_profit' : 'timeout';
+    const exitPrice = resolvePositionExitPrice(position, market);
+    const exitReason = resolutionHit ? 'resolution' : takeProfitHit ? 'take_profit' : 'timeout';
 
     closed.push(
       input.wallet.closePosition({
@@ -525,7 +544,10 @@ function formatDecisionLine(decision: WeatherMarketDecision): string {
 export async function runSimpleWeatherOperator(
   options: RunSimpleWeatherOperatorOptions,
 ): Promise<SimpleWeatherOperatorResult> {
-  const wallet = new PaperWallet({ startingCapital: options.startingCapital });
+  const wallet = new PaperWallet({
+    startingCapital: options.startingCapital,
+    state: options.walletState,
+  });
   seedPaperPositions(wallet, options.seedPositions);
 
   const markets = await fetchGammaMarkets({
@@ -614,6 +636,7 @@ export async function runSimpleWeatherOperator(
     dashboard,
     outputLines,
     historyFilePath,
+    walletState: wallet.exportState(),
   } satisfies SimpleWeatherOperatorResult;
 
   return result;

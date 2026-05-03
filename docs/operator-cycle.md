@@ -1,7 +1,26 @@
 # Operator cycle
 
 ## Estado atual
-Fluxo do observer mantido, com dashboard operacional lendo o último histórico salvo por padrão e opção explícita de execução live pela UI. O enrichment de forecast agora diferencia origem `live` de `history_fallback` quando o Open-Meteo responde com rate limit.
+Fluxo do observer mantido, com dashboard operacional lendo o último histórico salvo por padrão e opção explícita de execução live pela UI. O enrichment de forecast diferencia origem `live` de `history_fallback` quando o Open-Meteo responde com rate limit. Para experimentos paper financeiramente comparáveis, o observer deve ser executado com `--wallet-state-path` para preservar carteira, posições e PnL entre ciclos.
+
+## Mudança operacional aplicada à carteira paper
+- `src/operator/paper-observer-runtime.ts` aceita `--wallet-state-path=<arquivo.json>`.
+- Quando a flag é informada, cada ciclo carrega o estado da carteira antes de executar o operador e grava o estado atualizado ao final.
+- O arquivo de estado guarda capital inicial, caixa, PnL realizado, posições abertas/fechadas e próximo id.
+- Se o arquivo ainda não existir, o ciclo começa com a carteira inicial e cria o JSON ao final.
+- Sem `--wallet-state-path`, a execução continua stateless: posições e PnL não persistem entre ciclos.
+- O operador não abre nova posição para um mercado que já tenha posição `OPEN`, evitando empilhar exposições duplicadas no mesmo mercado.
+- Quando a Gamma/Polymarket marca um market como `closed=true`, o operador fecha qualquer posição `OPEN` daquele mercado com `exitReason=resolution` e preço final do outcome.
+- Mercados fechados podem aparecer no snapshot para liquidar posições antigas, mas são ignorados para novas entradas paper.
+- Fechamento por resolução tem prioridade sobre `take_profit` e `timeout`, porque representa o resultado oficial do mercado.
+
+## Como rodar experimentos persistentes
+- Baseline exemplo:
+  - `npm run operator:paper -- --cycles 288 --interval-ms 300000 --history-dir operator-runtime/history-baseline-persistent --runtime-log-path operator-runtime/baseline-persistent.ndjson --wallet-state-path operator-runtime/paper-wallet-baseline.json`
+- Variação `min_yes_001` exemplo:
+  - `npm run operator:paper -- --cycles 288 --interval-ms 300000 --history-dir operator-runtime/history-min-yes-001-persistent --runtime-log-path operator-runtime/min-yes-001-persistent.ndjson --wallet-state-path operator-runtime/paper-wallet-min-yes-001.json --min-yes-price 0.01`
+- Cada experimento deve ter seu próprio `historyDir`, log NDJSON e `wallet-state-path`.
+- Comparações de PnL/posições devem usar apenas ciclos gerados com carteira persistente.
 
 ## Mudança operacional aplicada ao forecast em 429
 - `src/weather/open-meteo.ts` classifica rate limit como `open_meteo_rate_limited`.

@@ -1,5 +1,75 @@
 # Implementation log
 
+## 2026-05-03 — Fechamento da carteira paper por resolução da Polymarket
+
+### O que foi criado/adaptado
+- Atualizado `src/ingestion/polymarket.ts` para preservar `closed` da Gamma no `Market` normalizado e manter mercados fechados ativos na descoberta para liquidação de posições antigas.
+- Atualizado `src/types/market.ts` com `Market.closed` e `PositionExitReason='resolution'`.
+- Atualizado `src/operator/simple-operator.ts` para fechar posições `OPEN` quando o market vier `closed=true`, usando o preço final do outcome como saída.
+- Atualizado `README.md` com comandos completos para rodar experimentos persistentes, dashboard, acompanhamento de artefatos e regras operacionais.
+- Atualizado `.gitignore` para manter `.next/` e `operator-runtime/` fora do versionamento.
+- Adicionados/ajustados testes em `tests/operator/simple-operator.test.ts` e `tests/ingestion/polymarket.test.ts`.
+
+### O que já funciona
+- Posições paper abertas são fechadas automaticamente quando a Polymarket/Gamma marca o mercado como encerrado.
+- Mercados fechados podem entrar no snapshot para liquidação, mas não geram novas entradas paper.
+- O fechamento por resolução tem prioridade sobre `take_profit` e `timeout`.
+- O histórico, `outputLines`, dashboard e wallet persistente passam a registrar `exitReason=resolution`.
+- Mercados resolvidos com `YES=0` fecham posições `YES` com perda total do notional; mercados resolvidos com `YES=1` fecham com pagamento integral das shares.
+
+### Resultado atual de testes/build
+- Teste focado executado com sucesso:
+  - `npm --prefix "/home/eduardodlima/Projetos/polymarket-hermes" test -- tests/operator/simple-operator.test.ts tests/ingestion/polymarket.test.ts`: 2 arquivos, 30 testes, todos passando.
+- Validação completa executada com sucesso:
+  - `npm --prefix "/home/eduardodlima/Projetos/polymarket-hermes" test`: 16 arquivos, 86 testes, todos passando.
+  - `npm --prefix "/home/eduardodlima/Projetos/polymarket-hermes" run build`: concluído com sucesso via `tsc -p tsconfig.json`.
+
+### Operação após a mudança
+- Observers persistentes antigos foram encerrados e reiniciados com as mesmas carteiras persistentes:
+  - `operator-runtime/history-baseline-persistent` + `operator-runtime/paper-wallet-baseline.json`
+  - `operator-runtime/history-min-yes-001-persistent` + `operator-runtime/paper-wallet-min-yes-001.json`
+- Leitura imediata após reinício confirmou os novos processos ativos e carteiras ainda em `baseline: open=9, closed=0, pnl=0.00` e `min_yes_001: open=10, closed=0, pnl=0.00`; a liquidação por resolução depende do primeiro ciclo novo reencontrar os markets fechados na Gamma/public-search.
+
+### Próximos passos sugeridos
+- Depois do primeiro ciclo atualizado terminar, comparar novamente `paper-wallet-baseline.json` e `paper-wallet-min-yes-001.json` para medir PnL realizado por resolução.
+- Se algum market resolvido não aparecer mais na busca pública da Gamma, considerar um backfill explícito por ids abertos antes de mudar a regra de liquidação.
+
+## 2026-05-01 — Persistência da carteira paper entre ciclos
+
+### O que foi criado/adaptado
+- Atualizado `src/types/paper.ts` com `PaperWalletState`, serializando capital inicial, caixa, PnL realizado, posições e próximo id.
+- Atualizado `src/paper/paper-wallet.ts` para inicializar a carteira a partir de estado persistido e exportar o estado atual ao fim do ciclo.
+- Atualizado `src/operator/simple-operator.ts` para aceitar `walletState`, devolver `walletState` no resultado e evitar abrir uma nova posição em mercado que já tenha posição `OPEN`.
+- Atualizado `src/operator/paper-observer-runtime.ts` com a flag `--wallet-state-path`, leitura do estado no início do ciclo e gravação após histórico/log runtime.
+- Ajustados testes em `tests/operator/paper-observer-runtime.test.ts` e `tests/operator/simple-operator.test.ts` para cobrir persistência entre ciclos e o comportamento sem empilhar posições duplicadas no mesmo mercado.
+
+### O que já funciona
+- Um observer iniciado com `--wallet-state-path=<arquivo.json>` preserva caixa, posições abertas/fechadas, PnL realizado e próximo id entre ciclos.
+- O primeiro ciclo sem arquivo de estado começa com a carteira inicial e cria o arquivo ao final.
+- Ciclos seguintes reutilizam o estado salvo e não reabrem o mesmo mercado enquanto já houver uma posição `OPEN` nele.
+- Execuções sem `--wallet-state-path` continuam possíveis, mas permanecem estateless e servem apenas para smoke/demo.
+- Históricos antigos gerados antes desta mudança não devem ser usados para avaliação financeira de PnL ou posições atuais.
+
+### Resultado atual de testes/build
+- Teste focado executado com sucesso:
+  - `npm --prefix "/home/eduardodlima/Projetos/polymarket-hermes" test -- tests/operator/paper-observer-runtime.test.ts`
+- Validação completa executada com sucesso:
+  - `npm --prefix "/home/eduardodlima/Projetos/polymarket-hermes" test`: 16 arquivos, 85 testes, todos passando.
+  - `npm --prefix "/home/eduardodlima/Projetos/polymarket-hermes" run build`: concluído com sucesso via `tsc -p tsconfig.json`.
+
+### Operação iniciada após a mudança
+- Encerrados os observers antigos que rodavam sem `--wallet-state-path`.
+- Iniciados novos loops persistentes:
+  - `operator-runtime/history-baseline-persistent` + `operator-runtime/paper-wallet-baseline.json`
+  - `operator-runtime/history-min-yes-001-persistent` + `operator-runtime/paper-wallet-min-yes-001.json`
+- Primeiro ciclo persistente criou ambos os arquivos de carteira com caixa inicial, sem posições abertas.
+- Os diretórios persistentes foram semeados com históricos antigos apenas para fallback de forecast; as carteiras começam limpas.
+
+### Próximos passos sugeridos
+- Aguardar novos ciclos dos experimentos persistentes para confirmar `forecast_fallbacks>0`, sinais e posições persistindo em carteira.
+- Comparar PnL e posições somente a partir dos novos artefatos persistentes.
+- Manter os históricos antigos apenas como evidência operacional de forecast/sinais, não como carteira financeira confiável.
+
 ## 2026-05-01 — Mitigação de Open-Meteo 429 com fallback auditável
 
 ### O que foi criado/adaptado

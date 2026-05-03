@@ -7,6 +7,66 @@ import { runSimpleWeatherOperator } from '../../src/operator/simple-operator';
 import type { GammaMarketRecord } from '../../src/ingestion/polymarket';
 
 describe('runSimpleWeatherOperator', () => {
+  it('closes seeded open position by Polymarket resolution', async () => {
+    const gammaPayload: GammaMarketRecord[] = [
+      {
+        id: 'w1',
+        slug: 'seoul-temperature',
+        question: 'Will the highest temperature in Seoul be 19°C on May 2?',
+        endDate: '2026-05-02T12:00:00Z',
+        liquidity: '15000',
+        volume24hr: '4000',
+        tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'temperature', label: 'Temperature' }],
+        outcomes: '["Yes","No"]',
+        outcomePrices: '["0","1"]',
+        category: 'weather',
+        closed: true,
+      },
+    ];
+
+    const result = await runSimpleWeatherOperator({
+      startingCapital: 1000,
+      marketLimit: 10,
+      forecastDays: 1,
+      minEdge: 0.03,
+      kellyFraction: 0.5,
+      maxPositionUsd: 100,
+      takeProfitPct: 0.2,
+      maxHoldingHours: 24,
+      nowIso: '2026-05-03T12:00:00Z',
+      seedPositions: [
+        {
+          marketId: 'w1',
+          outcome: 'YES',
+          entryPrice: 0.125,
+          shares: 88,
+          openedAt: '2026-05-02T12:00:00Z',
+        },
+      ],
+      weatherLocations: [],
+      gammaFetcher: async () => gammaPayload,
+      weatherFetcher: async () => {
+        throw new Error('should_not_be_called');
+      },
+    });
+
+    expect(result.closedPositions).toHaveLength(1);
+    expect(result.closedPositions[0]).toEqual(expect.objectContaining({
+      marketId: 'w1',
+      status: 'CLOSED',
+      exitPrice: 0,
+      exitReason: 'resolution',
+      realizedPnl: -11,
+    }));
+    expect(result.walletState.positions[0]).toEqual(expect.objectContaining({
+      marketId: 'w1',
+      status: 'CLOSED',
+      exitReason: 'resolution',
+    }));
+    expect(result.outputLines).toContain('positions_closed=1');
+    expect(result.outputLines).toContain('closed_position_exit_reasons=resolution:1');
+  });
+
   it('closes seeded open position by take-profit target', async () => {
     const gammaPayload: GammaMarketRecord[] = [
       {
@@ -1081,13 +1141,7 @@ describe('runSimpleWeatherOperator', () => {
             edge: 0.23,
           },
         ],
-        executedPositions: [
-          {
-            marketId: 'w1',
-            status: 'OPEN',
-            outcome: 'YES',
-          },
-        ],
+        executedPositions: [],
         closedPositions: [
           {
             marketId: 'w1',
@@ -1095,11 +1149,10 @@ describe('runSimpleWeatherOperator', () => {
             exitReason: 'take_profit',
           },
         ],
-        allPositions: expect.arrayContaining([
+        allPositions: [
           expect.objectContaining({ marketId: 'w1', status: 'CLOSED', exitReason: 'take_profit' }),
-          expect.objectContaining({ marketId: 'w1', status: 'OPEN', outcome: 'YES' }),
-        ]),
-        outputLines: expect.arrayContaining(['positions_closed=1']),
+        ],
+        outputLines: expect.arrayContaining(['positions_opened=0', 'positions_closed=1']),
       });
     } finally {
       await rm(historyDir, { recursive: true, force: true });

@@ -1,4 +1,4 @@
-import { appendFile, mkdir } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
   runSimpleWeatherOperator,
@@ -6,6 +6,7 @@ import {
   type SimpleWeatherOperatorResult,
   type WeatherLocationConfig,
 } from './simple-operator';
+import type { PaperWalletState } from '../types/paper';
 
 export interface PaperObserverCliOptions extends RunSimpleWeatherOperatorOptions {
   once: boolean;
@@ -13,6 +14,7 @@ export interface PaperObserverCliOptions extends RunSimpleWeatherOperatorOptions
   intervalMs: number;
   historyDir?: string;
   runtimeLogPath?: string;
+  walletStatePath?: string;
 }
 
 export interface PaperObserverCycleRecord {
@@ -116,6 +118,7 @@ export function buildPaperObserverCliOptions(args: string[]): PaperObserverCliOp
     intervalMs: parseNumberFlag(values.get('--interval-ms'), 60_000),
     historyDir: values.get('--history-dir') ?? 'operator-runtime/history',
     runtimeLogPath: resolveRuntimeLogPath(values),
+    walletStatePath: values.get('--wallet-state-path'),
     startingCapital: parseNumberFlag(values.get('--starting-capital'), 1000),
     marketLimit: parseNumberFlag(values.get('--market-limit'), 20),
     forecastDays: parseNumberFlag(values.get('--forecast-days'), 2),
@@ -153,10 +156,37 @@ async function appendCycleRecord(runtimeLogPath: string, record: PaperObserverCy
   await appendFile(runtimeLogPath, `${JSON.stringify(record)}\n`, 'utf8');
 }
 
+async function readWalletState(walletStatePath: string | undefined): Promise<PaperWalletState | undefined> {
+  if (!walletStatePath) {
+    return undefined;
+  }
+
+  try {
+    const content = await readFile(walletStatePath, 'utf8');
+    return JSON.parse(content) as PaperWalletState;
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+async function writeWalletState(walletStatePath: string | undefined, state: PaperWalletState): Promise<void> {
+  if (!walletStatePath) {
+    return;
+  }
+
+  await mkdir(dirname(walletStatePath), { recursive: true });
+  await writeFile(walletStatePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+}
+
 export async function runPaperObserverCycle(
   options: Omit<PaperObserverCliOptions, 'once' | 'cycles' | 'intervalMs'> & { nowIso?: string },
 ): Promise<PaperObserverCycleResult> {
   const runAt = options.nowIso ?? new Date().toISOString();
+  const walletState = await readWalletState(options.walletStatePath);
   const result = await runSimpleWeatherOperator({
     startingCapital: options.startingCapital,
     marketLimit: options.marketLimit,
@@ -171,6 +201,7 @@ export async function runPaperObserverCycle(
     nowIso: runAt,
     historyDir: options.historyDir,
     seedPositions: options.seedPositions,
+    walletState,
     weatherLocations: options.weatherLocations,
     searchQueries: options.searchQueries,
     gammaFetcher: options.gammaFetcher,
@@ -186,6 +217,8 @@ export async function runPaperObserverCycle(
   if (options.runtimeLogPath) {
     await appendCycleRecord(options.runtimeLogPath, record);
   }
+
+  await writeWalletState(options.walletStatePath, result.walletState);
 
   return { record, result };
 }

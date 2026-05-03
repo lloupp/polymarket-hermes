@@ -16,6 +16,7 @@ export interface GammaMarketRecord {
   outcomes?: string;
   outcomePrices?: string;
   category?: string;
+  closed?: boolean;
 }
 
 export interface GammaSearchMarketRecord extends GammaMarketRecord {
@@ -157,6 +158,7 @@ export function normalizeGammaMarket(raw: GammaMarketRecordWithDiscovery): Marke
     tags: parseTags(raw.tags),
     discoverySource: raw.discoverySource,
     discoveryQuery: raw.discoveryQuery,
+    closed: raw.closed,
   };
 }
 
@@ -167,7 +169,7 @@ export function extractGammaMarketsFromPublicSearch(payload: unknown): GammaSear
 
   return ((payload as GammaPublicSearchPayload).events ?? [])
     .flatMap((event) => event.markets ?? [])
-    .filter((market) => market.closed !== true && market.active !== false);
+    .filter((market) => market.active !== false);
 }
 
 export function mergeGammaMarketRecords(
