@@ -1,5 +1,21 @@
 # Implementation log
 
+## 2026-05-05 — Win Rate Tracker para paper trading
+
+### O que foi criado
+- `src/paper/win-rate-tracker.ts`: função `computeWinRate()` que calcula win rate, total de trades resolvidos, vitórias, derrotas e P&L total a partir de posições fechadas. Apenas posições com `exitReason='market_resolved'` são consideradas — `take_profit`, `timeout`, `market_expired` são excluídos pois não representam verificação de predição.
+- `tests/paper/win-rate-tracker.test.ts`: 4 testes cobrindo cálculo de win rate, exclusão de exit reasons não-resolvidos, array vazio e filtro de posições OPEN.
+
+### O que já funciona
+- `computeWinRate(positions)` retorna `{ totalResolved, wins, losses, winRate, totalPnl }`.
+- Vitória = `realizedPnl > 0`; derrota = `realizedPnl <= 0`.
+- `winRate = 0` quando não há posições resolvidas (evita divisão por zero).
+- Apenas posições `status='CLOSED'` + `exitReason='market_resolved'` entram no cálculo.
+
+### Resultado atual de testes
+- `npx vitest run tests/paper/win-rate-tracker.test.ts`: 4/4 passando.
+- Suite completa: 143/145 passando (2 falhas pré-existentes em `simple-operator.test.ts` — market resolution, não relacionadas a este módulo).
+
 ## 2026-05-03 — Fechamento da carteira paper por resolução da Polymarket
 
 ### O que foi criado/adaptado
