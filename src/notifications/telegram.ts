@@ -15,6 +15,30 @@ function maskToken(token: string): string {
   return `${token.slice(0, 4)}...${token.slice(-4)}`;
 }
 
+/** Format ISO timestamp to a readable UTC string */
+function formatTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  } catch {
+    return iso;
+  }
+}
+
+/** Format a PnL value with sign and dollar */
+function formatPnl(value: number): string {
+  return value >= 0
+    ? `+$${value.toFixed(2)}`
+    : `-$${Math.abs(value).toFixed(2)}`;
+}
+
+/** Format a dollar value */
+function formatUsd(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
 export function loadTelegramConfigFromEnv(
   env: Record<string, string | undefined>,
 ): TelegramConfig {
@@ -109,17 +133,7 @@ export function createTelegramNotifier(
   };
 }
 
-export interface CycleAlertData {
-  runAt: string;
-  totalMarkets: number;
-  weatherMarkets: number;
-  weatherForecasts: number;
-  signalsApproved: number;
-  signalsBlocked: number;
-  positionsOpened: number;
-  positionsClosed: number;
-  errors?: string[];
-}
+// ─── Data Interfaces ────────────────────────────────────────────────
 
 export interface SignalAlertData {
   marketSlug: string;
@@ -131,32 +145,139 @@ export interface SignalAlertData {
   reason: string;
 }
 
+export interface ClosedPositionAlertData {
+  marketQuestion: string;
+  outcome: string;
+  entryPrice: number;
+  exitPrice: number;
+  shares: number;
+  notional: number;
+  realizedPnl: number;
+  exitReason: string;
+}
+
+export interface MarketResolvedAlertData {
+  marketQuestion: string;
+  outcome: string;
+  winningOutcome: string;
+  entryPrice: number;
+  exitPrice: number;
+  shares: number;
+  realizedPnl: number;
+}
+
+export interface CycleAlertData {
+  runAt: string;
+  totalMarkets: number;
+  weatherMarkets: number;
+  weatherForecasts: number;
+  signalsApproved: number;
+  signalsBlocked: number;
+  positionsOpened: number;
+  positionsClosed: number;
+  /** Current wallet balance (cash + positions value) */
+  walletBalance?: number;
+  /** Starting capital for reference */
+  startingCapital?: number;
+  /** Cumulative realized PnL across all closed positions */
+  totalPnl?: number;
+  /** Open positions count */
+  openPositions?: number;
+  /** Win rate percentage (0-100) among resolved positions */
+  winRate?: number;
+  /** Number of resolved wins */
+  wins?: number;
+  /** Number of resolved losses */
+  losses?: number;
+  errors?: string[];
+  /** Approved signals detail (for inline display) */
+  signals?: SignalAlertData[];
+  /** Closed positions detail (for inline display) */
+  closedPositions?: (ClosedPositionAlertData | MarketResolvedAlertData)[];
+}
+
+// ─── Format Functions ────────────────────────────────────────────────
+
 export function formatCycleStartMessage(): string {
   return '🟢 <b>Paper Observer Starting</b>\nNew cycle starting now...';
 }
 
 export function formatCycleSummaryMessage(data: CycleAlertData): string {
   const lines: string[] = [];
-  lines.push('📊 <b>Cycle Complete</b>');
-  lines.push(`⏰ ${data.runAt}`);
-  lines.push('');
-  lines.push(`Markets analyzed: <b>${data.totalMarkets}</b>`);
-  lines.push(`Weather markets: <b>${data.weatherMarkets}</b>`);
-  lines.push(`Forecasts fetched: <b>${data.weatherForecasts}</b>`);
-  lines.push('');
-  lines.push(`Signals approved: <b>${data.signalsApproved}</b>`);
-  lines.push(`Signals blocked: ${data.signalsBlocked}`);
-  lines.push(`Positions opened: <b>${data.positionsOpened}</b>`);
-  lines.push(`Positions closed: ${data.positionsClosed}`);
 
+  // ── Header ──
+  lines.push('📊 <b>Cycle Report</b>');
+  lines.push(`⏰ ${formatTimestamp(data.runAt)}`);
+
+  // ── Wallet ──
+  if (data.walletBalance !== undefined) {
+    const pnl = data.totalPnl;
+    const pnlStr = pnl !== undefined ? ` (${formatPnl(pnl)})` : '';
+    const balEmoji = (pnl !== undefined && pnl >= 0) ? '🟢' : '🔴';
+    lines.push(`${balEmoji} Wallet: <b>${formatUsd(data.walletBalance)}</b>${pnlStr}`);
+    if (data.startingCapital !== undefined && data.startingCapital > 0) {
+      const pctReturn = ((data.walletBalance - data.startingCapital) / data.startingCapital) * 100;
+      lines.push(`📈 Return: <b>${pctReturn >= 0 ? '+' : ''}${pctReturn.toFixed(1)}%</b>`);
+    }
+  }
+
+  // ── Win Rate ──
+  if (data.winRate !== undefined) {
+    const wrEmoji = data.winRate >= 50 ? '✅' : '⚠️';
+    lines.push(`${wrEmoji} Win Rate: <b>${data.winRate.toFixed(0)}%</b> (${data.wins ?? 0}W / ${data.losses ?? 0}L)`);
+  }
+
+  // ── Positions ──
+  lines.push('');
+  lines.push('▫️ <b>Positions</b>');
+  lines.push(`  Open: <b>${data.openPositions ?? 0}</b> | New: <b>${data.positionsOpened}</b> | Closed: <b>${data.positionsClosed}</b>`);
+
+  // ── Scan ──
+  lines.push('');
+  lines.push('🔍 <b>Scan</b>');
+  lines.push(`  Markets: ${data.totalMarkets} | Weather: ${data.weatherMarkets} | Forecasts: ${data.weatherForecasts}`);
+  lines.push(`  Signals: ✅${data.signalsApproved} approved / 🚫${data.signalsBlocked} blocked`);
+
+  // ── Signals inline ──
+  if (data.signals && data.signals.length > 0) {
+    lines.push('');
+    lines.push('🔔 <b>Signals</b>');
+    for (const s of data.signals) {
+      const sideEmoji = s.side === 'BUY_YES' ? '🟢' : s.side === 'BUY_NO' ? '🔴' : '⚪';
+      lines.push(`  ${sideEmoji} <b>${s.side}</b> ${s.marketQuestion.slice(0, 45)}`);
+      lines.push(`     Price: ${s.price.toFixed(3)} | Edge: ${(s.edge * 100).toFixed(1)}% | $${s.positionSizeUsd.toFixed(0)}`);
+    }
+  }
+
+  // ── Closed positions inline ──
+  if (data.closedPositions && data.closedPositions.length > 0) {
+    lines.push('');
+    lines.push('💼 <b>Closed This Cycle</b>');
+    for (const pos of data.closedPositions) {
+      if ('winningOutcome' in pos) {
+        // MarketResolvedAlertData
+        const r = pos as MarketResolvedAlertData;
+        const won = r.outcome === r.winningOutcome;
+        const emoji = won ? '🏆' : '❌';
+        lines.push(`  ${emoji} <b>${r.outcome}</b> ${r.marketQuestion.slice(0, 35)} → ${r.winningOutcome} | ${formatPnl(r.realizedPnl)}`);
+      } else {
+        // ClosedPositionAlertData
+        const p = pos as ClosedPositionAlertData;
+        const pnlEmoji = p.realizedPnl >= 0 ? '📈' : '📉';
+        lines.push(`  ${pnlEmoji} <b>${p.outcome}</b> ${p.marketQuestion.slice(0, 35)} (${p.exitReason}) | ${formatPnl(p.realizedPnl)}`);
+      }
+    }
+  }
+
+  // ── Errors ──
   if (data.errors && data.errors.length > 0) {
     lines.push('');
-    lines.push(`⚠️ Errors: ${data.errors.length}`);
+    lines.push(`⚠️ <b>Errors: ${data.errors.length}</b>`);
     for (const error of data.errors.slice(0, 3)) {
-      lines.push(`  • ${error.slice(0, 100)}`);
+      lines.push(`  • ${error.slice(0, 80)}`);
     }
     if (data.errors.length > 3) {
-      lines.push(`  ... and ${data.errors.length - 3} more`);
+      lines.push(`  ... +${data.errors.length - 3} more`);
     }
   }
 
@@ -200,72 +321,42 @@ export function formatSignalsBatchMessage(signals: SignalAlertData[]): string {
   return lines.join('\n');
 }
 
-export interface ClosedPositionAlertData {
-  marketQuestion: string;
-  outcome: string;
-  entryPrice: number;
-  exitPrice: number;
-  shares: number;
-  notional: number;
-  realizedPnl: number;
-  exitReason: string;
-}
-
 export function formatClosedPositionsMessage(positions: ClosedPositionAlertData[]): string {
   if (positions.length === 0) {
     return '';
   }
 
- if (positions.length === 1) {
- const p = positions[0];
- const pnlEmoji = p.realizedPnl >= 0 ? '📈' : '📉';
- const pnlFormatted = p.realizedPnl >= 0
- ? `+$${p.realizedPnl.toFixed(2)}`
- : `-$${Math.abs(p.realizedPnl).toFixed(2)}`;
- return [
- `💼 <b>Paper Position Closed</b>`,
- `${p.marketQuestion.slice(0, 80)}`,
- ``,
- `Side: <b>${p.outcome}</b>`,
- `Entry: ${p.entryPrice.toFixed(4)} → Exit: ${p.exitPrice.toFixed(4)}`,
- `Shares: ${p.shares.toFixed(2)} | Notional: $${p.notional.toFixed(2)}`,
- `Reason: ${p.exitReason}`,
- `${pnlEmoji} PnL: <b>${pnlFormatted}</b>`,
- ].join('\n');
- }
+  if (positions.length === 1) {
+    const p = positions[0];
+    const pnlEmoji = p.realizedPnl >= 0 ? '📈' : '📉';
+    return [
+      `💼 <b>Paper Position Closed</b>`,
+      `${p.marketQuestion.slice(0, 80)}`,
+      ``,
+      `Side: <b>${p.outcome}</b>`,
+      `Entry: ${p.entryPrice.toFixed(4)} → Exit: ${p.exitPrice.toFixed(4)}`,
+      `Shares: ${p.shares.toFixed(2)} | Notional: $${p.notional.toFixed(2)}`,
+      `Reason: ${p.exitReason}`,
+      `${pnlEmoji} PnL: <b>${formatPnl(p.realizedPnl)}</b>`,
+    ].join('\n');
+  }
 
   const lines: string[] = [];
   lines.push(`💼 <b>${positions.length} Paper Positions Closed</b>`);
   lines.push('');
 
- let totalPnl = 0;
- for (const p of positions) {
- totalPnl += p.realizedPnl;
- const pnlStr = p.realizedPnl >= 0
- ? `+$${p.realizedPnl.toFixed(2)}`
- : `-$${Math.abs(p.realizedPnl).toFixed(2)}`;
- lines.push(
- `• ${p.outcome} ${p.marketQuestion.slice(0, 40)} — ${p.exitReason} | ${pnlStr}`,
- );
- }
+  let totalPnl = 0;
+  for (const p of positions) {
+    totalPnl += p.realizedPnl;
+    lines.push(
+      `• ${p.outcome} ${p.marketQuestion.slice(0, 40)} — ${p.exitReason} | ${formatPnl(p.realizedPnl)}`,
+    );
+  }
 
- const totalStr = totalPnl >= 0
- ? `+$${totalPnl.toFixed(2)}`
- : `-$${Math.abs(totalPnl).toFixed(2)}`;
- lines.push('');
- lines.push(`Total PnL: <b>${totalStr}</b>`);
+  lines.push('');
+  lines.push(`Total PnL: <b>${formatPnl(totalPnl)}</b>`);
 
   return lines.join('\n');
-}
-
-export interface MarketResolvedAlertData {
-  marketQuestion: string;
-  outcome: string;
-  winningOutcome: string;
-  entryPrice: number;
-  exitPrice: number;
-  shares: number;
-  realizedPnl: number;
 }
 
 export function formatMarketResolvedMessage(resolved: MarketResolvedAlertData[]): string {
@@ -277,9 +368,6 @@ export function formatMarketResolvedMessage(resolved: MarketResolvedAlertData[])
     const r = resolved[0];
     const won = r.outcome === r.winningOutcome;
     const emoji = won ? '🏆' : '❌';
-    const pnlStr = r.realizedPnl >= 0
-      ? `+$${r.realizedPnl.toFixed(2)}`
-      : `-$${Math.abs(r.realizedPnl).toFixed(2)}`;
     return [
       `🏁 <b>Market Resolved</b>`,
       `${r.marketQuestion.slice(0, 80)}`,
@@ -287,7 +375,7 @@ export function formatMarketResolvedMessage(resolved: MarketResolvedAlertData[])
       `Your side: <b>${r.outcome}</b> | Winner: <b>${r.winningOutcome}</b> ${emoji}`,
       `Entry: ${r.entryPrice.toFixed(4)} → Exit: ${r.exitPrice.toFixed(4)}`,
       `Shares: ${r.shares.toFixed(2)}`,
-      `PnL: <b>${pnlStr}</b>`,
+      `PnL: <b>${formatPnl(r.realizedPnl)}</b>`,
     ].join('\n');
   }
 
@@ -300,19 +388,13 @@ export function formatMarketResolvedMessage(resolved: MarketResolvedAlertData[])
     totalPnl += r.realizedPnl;
     const won = r.outcome === r.winningOutcome;
     const emoji = won ? '✅' : '❌';
-    const pnlStr = r.realizedPnl >= 0
-      ? `+$${r.realizedPnl.toFixed(2)}`
-      : `-$${Math.abs(r.realizedPnl).toFixed(2)}`;
     lines.push(
-      `• ${emoji} ${r.outcome} ${r.marketQuestion.slice(0, 40)} → ${r.winningOutcome} won | ${pnlStr}`,
+      `• ${emoji} ${r.outcome} ${r.marketQuestion.slice(0, 40)} → ${r.winningOutcome} won | ${formatPnl(r.realizedPnl)}`,
     );
   }
 
-  const totalStr = totalPnl >= 0
-    ? `+$${totalPnl.toFixed(2)}`
-    : `-$${Math.abs(totalPnl).toFixed(2)}`;
   lines.push('');
-  lines.push(`Total PnL: <b>${totalStr}</b>`);
+  lines.push(`Total PnL: <b>${formatPnl(totalPnl)}</b>`);
 
   return lines.join('\n');
 }

@@ -6,18 +6,15 @@ import {
   sleep,
 } from '../src/operator/paper-observer-runtime';
 import {
- loadTelegramConfigFromEnv,
- resolveTelegramConfig,
- createTelegramNotifier,
- formatCycleStartMessage,
- formatCycleSummaryMessage,
- formatSignalsBatchMessage,
- formatClosedPositionsMessage,
- formatMarketResolvedMessage,
- formatCriticalErrorMessage,
- type SignalAlertData,
- type ClosedPositionAlertData,
- type MarketResolvedAlertData,
+  loadTelegramConfigFromEnv,
+  resolveTelegramConfig,
+  createTelegramNotifier,
+  formatCycleStartMessage,
+  formatCycleSummaryMessage,
+  formatCriticalErrorMessage,
+  type SignalAlertData,
+  type ClosedPositionAlertData,
+  type MarketResolvedAlertData,
 } from '../src/notifications/telegram';
 
 async function main() {
@@ -51,6 +48,65 @@ async function main() {
     console.log(renderPaperObserverCycleSummary(cycle));
 
     if (notifier.isEnabled()) {
+      // ── Build consolidated cycle report ──
+      const approvedDecisions = cycle.result.decisions.filter(
+        (d) => d.signal !== 'HOLD',
+      );
+
+      // Build signals list for inline display
+      const signals: SignalAlertData[] = approvedDecisions.map((decision) => {
+        const market = cycle.result.snapshot.weatherMarkets.find(
+          (m) => m.id === decision.marketId,
+        );
+        return {
+          marketSlug: market?.slug ?? decision.marketId,
+          marketQuestion: market?.question ?? decision.marketId,
+          side: decision.signal,
+          price: market?.yesPrice ?? 0,
+          edge: decision.edge,
+          positionSizeUsd: decision.positionSize * (options.maxPositionUsd ?? 100),
+          reason: decision.reason,
+        };
+      });
+
+      // Build closed positions list for inline display
+      const closedPositions: (ClosedPositionAlertData | MarketResolvedAlertData)[] = [];
+      for (const pos of cycle.result.closedPositions) {
+        const market = cycle.result.snapshot.weatherMarkets.find(
+          (m) => m.id === pos.marketId,
+        );
+
+        if (pos.exitReason === 'market_resolved') {
+          const winningOutcome = pos.exitPrice === 1 ? 'YES' : 'NO';
+          closedPositions.push({
+            marketQuestion: market?.question ?? pos.marketId,
+            outcome: pos.outcome,
+            winningOutcome,
+            entryPrice: pos.entryPrice,
+            exitPrice: pos.exitPrice ?? 0,
+            shares: pos.shares,
+            realizedPnl: pos.realizedPnl ?? 0,
+          } satisfies MarketResolvedAlertData);
+        } else {
+          closedPositions.push({
+            marketQuestion: market?.question ?? pos.marketId,
+            outcome: pos.outcome,
+            entryPrice: pos.entryPrice,
+            exitPrice: pos.exitPrice ?? 0,
+            shares: pos.shares,
+            notional: pos.notional,
+            realizedPnl: pos.realizedPnl ?? 0,
+            exitReason: pos.exitReason ?? 'unknown',
+          } satisfies ClosedPositionAlertData);
+        }
+      }
+
+      // Build wallet data from wallet state
+      const ws = cycle.result.walletState;
+      // Wallet balance = cash + unrealized position value (use entry notional as proxy)
+      const walletBalance = ws ? ws.cash + ws.positions.reduce((sum, p) => sum + p.notional, 0) : undefined;
+
+      // Win rate from cycle record
       const cycleSummaryMsg = formatCycleSummaryMessage({
         runAt: cycle.record.runAt,
         totalMarkets: cycle.record.totalMarkets,
@@ -60,82 +116,18 @@ async function main() {
         signalsBlocked: cycle.record.signalsBlocked,
         positionsOpened: cycle.record.positionsOpened,
         positionsClosed: cycle.record.positionsClosed,
+        walletBalance,
+        startingCapital: options.startingCapital,
+        totalPnl: ws ? ws.realizedPnl : undefined,
+        openPositions: ws ? ws.positions.length : undefined,
+        winRate: cycle.record.winRate,
+        wins: cycle.record.winRateWins,
+        losses: cycle.record.winRateLosses,
+        signals,
+        closedPositions,
       });
       await notifier.send(cycleSummaryMsg);
-
-      const approvedDecisions = cycle.result.decisions.filter(
-        (d) => d.signal !== 'HOLD',
-      );
-
-      if (approvedDecisions.length > 0) {
-        const signals: SignalAlertData[] = approvedDecisions.map((decision) => {
-          const market = cycle.result.snapshot.weatherMarkets.find(
-            (m) => m.id === decision.marketId,
-          );
-          return {
-            marketSlug: market?.slug ?? decision.marketId,
-            marketQuestion: market?.question ?? decision.marketId,
-            side: decision.signal,
-            price: market?.yesPrice ?? 0,
-            edge: decision.edge,
-            positionSizeUsd: decision.positionSize * (options.maxPositionUsd ?? 100),
-            reason: decision.reason,
-          };
-        });
-
- const signalMsg = formatSignalsBatchMessage(signals);
- if (signalMsg) {
- await notifier.send(signalMsg);
- }
- }
-
-  // Closed positions alert
-  if (cycle.result.closedPositions.length > 0) {
-    const marketResolved: MarketResolvedAlertData[] = [];
-    const otherClosed: ClosedPositionAlertData[] = [];
-
-    for (const pos of cycle.result.closedPositions) {
-      const market = cycle.result.snapshot.weatherMarkets.find(
-        (m) => m.id === pos.marketId,
-      );
-
-      if (pos.exitReason === 'market_resolved') {
-        // Derive winning outcome from exit price: YES@1.0 means YES won, YES@0.0 means NO won
-        const winningOutcome = pos.exitPrice === 1 ? 'YES' : 'NO';
-        marketResolved.push({
-          marketQuestion: market?.question ?? pos.marketId,
-          outcome: pos.outcome,
-          winningOutcome,
-          entryPrice: pos.entryPrice,
-          exitPrice: pos.exitPrice ?? 0,
-          shares: pos.shares,
-          realizedPnl: pos.realizedPnl ?? 0,
-        });
-      } else {
-        otherClosed.push({
-          marketQuestion: market?.question ?? pos.marketId,
-          outcome: pos.outcome,
-          entryPrice: pos.entryPrice,
-          exitPrice: pos.exitPrice ?? 0,
-          shares: pos.shares,
-          notional: pos.notional,
-          realizedPnl: pos.realizedPnl ?? 0,
-          exitReason: pos.exitReason ?? 'unknown',
-        });
-      }
     }
-
-    const resolvedMsg = formatMarketResolvedMessage(marketResolved);
-    if (resolvedMsg) {
-      await notifier.send(resolvedMsg);
-    }
-
-    const closedMsg = formatClosedPositionsMessage(otherClosed);
-    if (closedMsg) {
-      await notifier.send(closedMsg);
-    }
-  }
- }
 
     completedCycles += 1;
 

@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes Kanban — Guia Interativo</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a26;
+    --border: #2a2a3a;
+    --ink: #e8e8f0;
+    --muted: #8888a0;
+    --accent: #6c5ce7;
+    --accent2: #a29bfe;
+    --green: #00b894;
+    --red: #ff6b6b;
+    --orange: #fdcb6e;
+    --blue: #74b9ff;
+    --pink: #fd79a8;
+    --cyan: #81ecec;
+    --radius: 12px;
+    --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--ink);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+  /* Hero */
+  .hero {
+    padding: 80px 0 60px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  .hero-badge {
+    display: inline-block;
+    background: var(--accent);
+    color: white;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 16px;
+    border-radius: 100px;
+    margin-bottom: 24px;
+  }
+  .hero h1 {
+    font-size: 48px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    margin-bottom: 16px;
+    background: linear-gradient(135deg, var(--ink), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .hero p {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* Sections */
+  section { padding: 60px 0; border-bottom: 1px solid var(--border); }
+  section h2 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+  }
+  section h2 .num {
+    color: var(--accent);
+    font-weight: 800;
+    margin-right: 8px;
+  }
+  section .subtitle {
+    color: var(--muted);
+    font-size: 15px;
+    margin-bottom: 32px;
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .card .icon { font-size: 28px; margin-bottom: 12px; }
+  .card h3 { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+  /* Specialist roster */
+  .roster { display: grid; gap: 8px; }
+  .roster-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+  }
+  .roster-tag {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 6px;
+    min-width: 110px;
+    text-align: center;
+  }
+  .roster-tag.researcher { background: #6c5ce720; color: var(--accent2); }
+  .roster-tag.analyst { background: #00b89420; color: var(--green); }
+  .roster-tag.writer { background: #fd79a820; color: var(--pink); }
+  .roster-tag.reviewer { background: #fdcb6e20; color: var(--orange); }
+  .roster-tag.backend { background: #74b9ff20; color: var(--blue); }
+  .roster-tag.frontend { background: #81ecec20; color: var(--cyan); }
+  .roster-tag.ops { background: #ff6b6b20; color: var(--red); }
+  .roster-tag.pm { background: #a29bfe20; color: var(--accent2); }
+  .roster-desc { font-size: 14px; color: var(--muted); }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+    padding: 32px 0;
+    margin-bottom: 32px;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 100px;
+  }
+  .flow-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 800;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    transition: all 0.3s;
+  }
+  .flow-circle.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 0 20px #6c5ce740;
+  }
+  .flow-label { font-size: 12px; color: var(--muted); font-weight: 600; text-align: center; }
+  .flow-arrow {
+    font-size: 20px;
+    color: var(--border);
+    padding: 0 4px;
+    min-width: 30px;
+    text-align: center;
+    margin-top: -20px;
+  }
+
+  /* Code blocks */
+  .code-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .code-header span { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .code-dots { display: flex; gap: 6px; }
+  .code-dots i { width: 10px; height: 10px; border-radius: 50%; }
+  .code-dots i:nth-child(1) { background: #ff5f57; }
+  .code-dots i:nth-child(2) { background: #ffbd2e; }
+  .code-dots i:nth-child(3) { background: #28ca42; }
+  pre {
+    padding: 20px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.8;
+    color: var(--ink);
+  }
+  .kw { color: var(--accent2); }
+  .fn { color: var(--green); }
+  .str { color: var(--orange); }
+  .cmt { color: #555570; font-style: italic; }
+  .var { color: var(--cyan); }
+  .num { color: var(--pink); }
+
+  /* Kanban board visual */
+  .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 32px 0;
+  }
+  .kanban-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    min-height: 200px;
+  }
+  .kanban-col-header {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+  }
+  .kanban-col-header.todo { color: var(--muted); border-color: var(--muted); }
+  .kanban-col-header.ready { color: var(--blue); border-color: var(--blue); }
+  .kanban-col-header.progress { color: var(--orange); border-color: var(--orange); }
+  .kanban-col-header.done { color: var(--green); border-color: var(--green); }
+
+  .kanban-card {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: grab;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .kanban-card:hover { border-color: var(--accent); }
+  .kanban-card-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .kanban-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+  .kanban-card-assignee {
+    font-family: var(--mono);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .kanban-card-id { color: var(--muted); }
+
+  /* Dependency graph */
+  .dep-graph {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin: 24px 0;
+    text-align: center;
+  }
+  .dep-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .dep-node {
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    position: relative;
+    transition: all 0.3s;
+  }
+  .dep-node:hover { border-color: var(--accent); transform: scale(1.05); }
+  .dep-node .dep-tag {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--mono);
+    font-size: 10px;
+    background: var(--accent);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+  }
+  .dep-connector {
+    color: var(--muted);
+    font-size: 18px;
+  }
+  .dep-arrow-down {
+    color: var(--muted);
+    font-size: 24px;
+    margin: 8px 0;
+  }
+
+  /* Pattern blocks */
+  .pattern {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .pattern h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .pattern .pattern-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+  .pattern-tag.fanout { background: #6c5ce720; color: var(--accent2); }
+  .pattern-tag.pipeline { background: #00b89420; color: var(--green); }
+  .pattern-tag.queue { background: #fdcb6e20; color: var(--orange); }
+  .pattern-tag.human { background: #fd79a820; color: var(--pink); }
+  .pattern p { font-size: 14px; color: var(--muted); line-height: 1.6; }
+  .pattern-visual {
+    font-family: var(--mono);
+    font-size: 13px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 12px;
+    color: var(--ink);
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* Interactive demo */
+  .demo-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin: 24px 0;
+  }
+  .demo-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+  .demo-tab {
+    padding: 14px 24px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    transition: all 0.2s;
+    background: none;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+  .demo-tab:hover { color: var(--ink); }
+  .demo-tab.active {
+    color: var(--accent2);
+    border-bottom-color: var(--accent);
+  }
+  .demo-content { padding: 24px; display: none; }
+  .demo-content.active { display: block; }
+
+  /* CLI commands */
+  .cli-list { display: grid; gap: 8px; }
+  .cli-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px 16px;
+  }
+  .cli-cmd {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--green);
+    white-space: nowrap;
+    min-width: 320px;
+  }
+  .cli-desc { font-size: 13px; color: var(--muted); }
+
+  /* When to use checklist */
+  .checklist { list-style: none; display: grid; gap: 12px; }
+  .checklist li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .check-icon {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: white;
+    margin-top: 2px;
+  }
+
+  /* Animations */
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .animate-in { animation: slideIn 0.5s ease-out forwards; }
+
+  /* Footer */
+  footer {
+    padding: 40px 0;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 32px; }
+    .kanban-board { grid-template-columns: repeat(2, 1fr); }
+    .cli-item { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .cli-cmd { min-width: unset; }
+    .dep-row { flex-direction: column; }
+    .dep-arrow-down { transform: rotate(0deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="container">
+    <div class="hero-badge">HERMES AGENT</div>
+    <h1>Modo Kanban</h1>
+    <p>Sistema de tarefas distribuídas entre agentes especialistas — com dependências, paralelismo e human-in-the-loop.</p>
+  </div>
+</div>
+
+<!-- When to use -->
+<section>
+  <div class="container">
+    <h2><span class="num">01</span>Quando Usar</h2>
+    <p class="subtitle">Kanban brilha quando o trabalho é complexo, multi-agente, ou precisa sobreviver a crashes.</p>
+    <ul class="checklist">
+      <li><div class="check-icon">✓</div><div><strong>Múltiplos especialistas</strong> — Pesquisa + análise + escrita requerem 3 perfis diferentes, cada um com seu contexto.</div></li>
+      <li><div class="check-icon">✓</div><div><strong>Sobrevivência a crashes</strong> — Tarefas longas ou recorrentes que não podem perder progresso se o agente cair.</div></li>
+      <li><div class="check-icon">✓</div><div><strong>Human-in-the-loop</strong> — O operador quer aprovar, revisar, ou intervir em qualquer passo do fluxo.</div></li>
+      <li><div class="check-icon">✓</div><div><strong>Paralelismo</strong> — Fan-out: N tarefas independentes rodam ao mesmo tempo, fan-in no final.</div></li>
+      <li><div class="check-icon">✓</div><div><strong>Revisão e iteração</strong> — Um reviewer bloqueia, o operador desbloqueia com feedback, o ciclo continua.</div></li>
+      <li><div class="check-icon">✓</div><div><strong>Audit trail</strong> — Cada tarefa fica registrada em SQLite — histórico completo, sempre acessível.</div></li>
+    </ul>
+  </div>
+</section>
+
+<!-- Flow -->
+<section>
+  <div class="container">
+    <h2><span class="num">02</span>Fluxo do Lifecycle</h2>
+    <p class="subtitle">Do pedido à entrega — 6 passos que o dispatcher gerencia automaticamente.</p>
+
+    <div class="flow" id="flowDiagram">
+      <div class="flow-step">
+        <div class="flow-circle active" id="f1">1</div>
+        <div class="flow-label">Decompor</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" id="f2">2</div>
+        <div class="flow-label">Criar Tarefas</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" id="f3">3</div>
+        <div class="flow-label">Dispatch</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" id="f4">4</div>
+        <div class="flow-label">Worker Executa</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" id="f5">5</div>
+        <div class="flow-label">Complete / Block</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-circle" id="f6">6</div>
+        <div class="flow-label">Handoff</div>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="icon">🧩</div>
+        <h3>Decompor &amp; Criar</h3>
+        <p>O orchestrador recebe seu pedido, quebra em subtarefas independentes e cria cada uma no board com <code>kanban_create</code>.</p>
+      </div>
+      <div class="card">
+        <div class="icon">⚡</div>
+        <h3>Dispatch Automático</h3>
+        <p>O dispatcher pega tarefas <em>ready</em> e spawna o agente certo. Tarefas com <code>parents</code> esperam os pais terminarem.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🔄</div>
+        <h3>Complete ou Block</h3>
+        <p>Worker termina → <code>kanban_complete(summary, metadata)</code>. Precisa de humano → <code>kanban_block(reason)</code>.</p>
+      </div>
+      <div class="card">
+        <div class="icon">🤝</div>
+        <h3>Handoff</h3>
+        <p>O <code>summary</code> + <code>metadata</code> do worker vira o input do próximo. Dependências se resolvem sozinhas.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Roster -->
+<section>
+  <div class="container">
+    <h2><span class="num">03</span>Roster de Especialistas</h2>
+    <p class="subtitle">Perfis padrão que o dispatcher conhece. Cada um com workspace e ferramentas próprias.</p>
+    <div class="roster">
+      <div class="roster-item">
+        <span class="roster-tag researcher">researcher</span>
+        <span class="roster-desc">Lê fontes, coleta fatos, escreve achados</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag analyst">analyst</span>
+        <span class="roster-desc">Sintetiza, rankeia, deduplica múltiplos outputs de researcher</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag writer">writer</span>
+        <span class="roster-desc">Escreve prosa na voz do usuário</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag reviewer">reviewer</span>
+        <span class="roster-desc">Lê output, deixa findings, aprova ou bloqueia</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag backend">backend-eng</span>
+        <span class="roster-desc">Escreve código server-side</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag frontend">frontend-eng</span>
+        <span class="roster-desc">Escreve código client-side</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag ops">ops</span>
+        <span class="roster-desc">Rodar scripts, deploy, infra</span>
+      </div>
+      <div class="roster-item">
+        <span class="roster-tag pm">pm</span>
+        <span class="roster-desc">Specs, critérios de aceite</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Dependency Example -->
+<section>
+  <div class="container">
+    <h2><span class="num">04</span>Dependências na Prática</h2>
+    <p class="subtitle">Parents controlam a ordem — filhos só sobem pra "ready" quando todos os pais completam.</p>
+
+    <div class="dep-graph">
+      <div class="dep-row">
+        <div class="dep-node">
+          <span class="dep-tag">T1</span>
+          🔍 Pesquisar custos
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">researcher</div>
+        </div>
+        <div class="dep-connector"></div>
+        <div class="dep-node">
+          <span class="dep-tag">T2</span>
+          🔍 Pesquisar performance
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">researcher</div>
+        </div>
+      </div>
+      <div class="dep-arrow-down">↓ parents: [T1, T2]</div>
+      <div class="dep-row">
+        <div class="dep-node">
+          <span class="dep-tag">T3</span>
+          📊 Sintetizar recomendação
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">analyst</div>
+        </div>
+      </div>
+      <div class="dep-arrow-down">↓ parent: [T3]</div>
+      <div class="dep-row">
+        <div class="dep-node">
+          <span class="dep-tag">T4</span>
+          ✍️ Escrever memo
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">writer</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <div class="code-dots"><i></i><i></i><i></i></div>
+        <span>kanban_create com parents</span>
+      </div>
+<pre><span class="cmt"># T1 e T2 rodam em paralelo — sem parents</span>
+<span class="var">t1</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Pesquisar custos do Postgres"</span>,
+  assignee = <span class="str">"researcher"</span>,
+  body = <span class="str">"Compare custos de infra, migração e ops em 3 anos."</span>
+)
+
+<span class="var">t2</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Pesquisar performance do Postgres"</span>,
+  assignee = <span class="str">"researcher"</span>,
+  body = <span class="str">"Compare latência, throughput e scaling em ~500GB."</span>
+)
+
+<span class="cmt"># T3 espera T1 e T2 completarem</span>
+<span class="var">t3</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Sintetizar recomendação"</span>,
+  assignee = <span class="str">"analyst"</span>,
+  parents = [<span class="var">t1</span>, <span class="var">t2</span>],  <span class="cmt"># auto-promote quando ambos done</span>
+  body = <span class="str">"Leia findings de T1 e T2. Produza recomendação go/no-go."</span>
+)
+
+<span class="cmt"># T4 espera T3 completar</span>
+<span class="var">t4</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Escrever memo para CTO"</span>,
+  assignee = <span class="str">"writer"</span>,
+  parents = [<span class="var">t3</span>],
+  body = <span class="str">"Transforme recomendação em memo de 2 páginas."</span>
+)</pre>
+    </div>
+  </div>
+</section>
+
+<!-- Board Visual -->
+<section>
+  <div class="container">
+    <h2><span class="num">05</span>O Board na Prática</h2>
+    <p class="subtitle">Visualização em tempo real — tarefas fluem de todo → ready → in_progress → done.</p>
+
+    <div class="kanban-board">
+      <div class="kanban-col">
+        <div class="kanban-col-header todo">TODO</div>
+        <div class="kanban-card">
+          <div class="kanban-card-title">Pesquisar custos do Postgres</div>
+          <div class="kanban-card-meta">
+            <span class="kanban-card-assignee researcher">researcher</span>
+            <span class="kanban-card-id">T1</span>
+          </div>
+        </div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-header ready">READY</div>
+        <div class="kanban-card">
+          <div class="kanban-card-title">Pesquisar performance</div>
+          <div class="kanban-card-meta">
+            <span class="kanban-card-assignee researcher">researcher</span>
+            <span class="kanban-card-id">T2</span>
+          </div>
+        </div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-header progress">IN PROGRESS</div>
+        <div class="kanban-card" style="border-left: 3px solid var(--green);">
+          <div class="kanban-card-title">Sintetizar recomendação</div>
+          <div class="kanban-card-meta">
+            <span class="kanban-card-assignee analyst">analyst</span>
+            <span class="kanban-card-id">T3</span>
+          </div>
+        </div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-header done">DONE</div>
+        <div class="kanban-card" style="opacity: 0.6;">
+          <div class="kanban-card-title">Escrever memo CTO</div>
+          <div class="kanban-card-meta">
+            <span class="kanban-card-assignee writer">writer</span>
+            <span class="kanban-card-id">T4</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Patterns -->
+<section>
+  <div class="container">
+    <h2><span class="num">06</span>Padrões Comuns</h2>
+    <p class="subtitle">4 padrões que cobrem 90% dos casos de uso.</p>
+
+    <div class="pattern">
+      <h3>Fan-out + Fan-in</h3>
+      <span class="pattern-tag fanout">PARALELO</span>
+      <p>N researchers trabalham em paralelo, 1 analyst sintetiza tudo no final.</p>
+      <div class="pattern-visual">R1 ──┐
+R2 ──┼──→ A1 (parents: [R1, R2, R3])
+R3 ──┘</div>
+    </div>
+
+    <div class="pattern">
+      <h3>Pipeline com Gate</h3>
+      <span class="pattern-tag pipeline">SEQUENCIAL</span>
+      <p>Cada etapa depende da anterior. Reviewer pode bloquear e mandar de volta.</p>
+      <div class="pattern-visual">PM → Backend → Reviewer ──✓──→ Merge
+                  └──✗──→ Novo task p/ Backend (com feedback)</div>
+    </div>
+
+    <div class="pattern">
+      <h3>Fila Serial</h3>
+      <span class="pattern-tag queue">BATCH</span>
+      <p>50 tarefas do mesmo tipo, sem dependências entre si. Dispatcher serializa por profile.</p>
+      <div class="pattern-visual">T1 → translator ──→ done
+T2 → translator ──→ done
+T3 → translator ──→ done
+...</div>
+    </div>
+
+    <div class="pattern">
+      <h3>Human-in-the-Loop</h3>
+      <span class="pattern-tag human">INTERATIVO</span>
+      <p>Worker bloqueia com <code>kanban_block(reason)</code>. Operador responde via <code>/unblock</code>.</p>
+      <div class="pattern-visual">Worker ──→ kanban_block("Qual API key usar?")
+           ←── /unblock + comentário com a key
+Worker ──→ continua execução</div>
+    </div>
+  </div>
+</section>
+
+<!-- Interactive Demo -->
+<section>
+  <div class="container">
+    <h2><span class="num">07</span>Exemplos Interativos</h2>
+    <p class="subtitle">Clique nos tabs para ver diferentes cenários de uso.</p>
+
+    <div class="demo-panel">
+      <div class="demo-tabs">
+        <button class="demo-tab active" onclick="showDemo(0)">🔍 Pesquisa</button>
+        <button class="demo-tab" onclick="showDemo(1)">💻 Feature Dev</button>
+        <button class="demo-tab" onclick="showDemo(2)">🚀 Deploy</button>
+      </div>
+
+      <div class="demo-content active" id="demo0">
+        <h3 style="margin-bottom:16px;font-size:16px;">Cenário: "Devemos migrar para Postgres?"</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <div class="code-dots"><i></i><i></i><i></i></div>
+            <span>Orchestrator decompondo</span>
+          </div>
+<pre><span class="cmt"># Usuário pede: "Analise se devemos migrar para Postgres"</span>
+
+<span class="cmt"># 1. Fan-out: 2 researchers em paralelo</span>
+<span class="var">t1</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Custos: Postgres vs atual"</span>,
+  assignee = <span class="str">"researcher"</span>,
+  body = <span class="str">"Compare infra, migração e ops em 3 anos. Fontes: AWS/GCP pricing, estimativas de tempo do time."</span>
+)
+
+<span class="var">t2</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Performance: Postgres vs atual"</span>,
+  assignee = <span class="str">"researcher"</span>,
+  body = <span class="str">"Compare latência, throughput e scaling em ~500GB, 10k QPS. Fontes: benchmarks, case studies."</span>
+)
+
+<span class="cmt"># 2. Fan-in: analyst sintetiza</span>
+<span class="var">t3</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Recomendação de migração"</span>,
+  assignee = <span class="str">"analyst"</span>,
+  parents = [<span class="var">t1</span>, <span class="var">t2</span>],
+  body = <span class="str">"Leia findings de T1 e T2. Recomendação 1 página com trade-offs e go/no-go."</span>
+)
+
+<span class="cmt"># 3. Writer transforma em memo</span>
+<span class="var">t4</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Memo de decisão p/ CTO"</span>,
+  assignee = <span class="str">"writer"</span>,
+  parents = [<span class="var">t3</span>],
+  body = <span class="str">"Memo de 2 páginas baseado na recomendação do analyst."</span>
+)
+
+<span class="cmt"># Resultado: T1 e T2 rodam em paralelo (~5min cada)</span>
+<span class="cmt"># T3 inicia automaticamente quando ambos completam</span>
+<span class="cmt"># T4 inicia quando T3 completa → memo final entregue</span></pre>
+        </div>
+      </div>
+
+      <div class="demo-content" id="demo1">
+        <h3 style="margin-bottom:16px;font-size:16px;">Cenário: "Implementar rate limiter"</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <div class="code-dots"><i></i><i></i><i></i></div>
+            <span>Pipeline com review gate</span>
+          </div>
+<pre><span class="cmt"># Pipeline: PM → Eng → Reviewer → (aprova?) → Merge</span>
+
+<span class="var">t1</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Spec: Rate limiter"</span>,
+  assignee = <span class="str">"pm"</span>,
+  body = <span class="str">"Especificar algoritmo (token bucket vs sliding window), chave (user_id vs IP), limits, config."</span>
+)
+
+<span class="var">t2</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Implementar rate limiter"</span>,
+  assignee = <span class="str">"backend-eng"</span>,
+  parents = [<span class="var">t1</span>],
+  body = <span class="str">"Implemente conforme spec do T1. Testes unitários + integração."</span>
+)
+
+<span class="var">t3</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Code review: rate limiter"</span>,
+  assignee = <span class="str">"reviewer"</span>,
+  parents = [<span class="var">t2</span>],
+  body = <span class="str">"Revise segurança (SQL injection, bypasses), performance, testes."</span>
+)
+
+<span class="cmt"># Se reviewer bloquear:</span>
+<span class="cmt"># → kanban_block("SQL injection em /search, CSRF faltando")</span>
+<span class="cmt"># → Operador desbloqueia ou cria novo task p/ backend-eng corrigir</span>
+<span class="cmt"># → Reviewer roda de novo após correção</span></pre>
+        </div>
+      </div>
+
+      <div class="demo-content" id="demo2">
+        <h3 style="margin-bottom:16px;font-size:16px;">Cenário: "Deploy com validação humana"</h3>
+        <div class="code-block">
+          <div class="code-header">
+            <div class="code-dots"><i></i><i></i><i></i></div>
+            <span>Human-in-the-loop no deploy</span>
+          </div>
+<pre><span class="cmt"># Deploy com gate humano antes de ir pra produção</span>
+
+<span class="var">t1</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Build + testes CI"</span>,
+  assignee = <span class="str">"ops"</span>,
+  body = <span class="str">"Rode build, testes, lint. Reporte resultado."</span>
+)
+
+<span class="var">t2</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Deploy staging"</span>,
+  assignee = <span class="str">"ops"</span>,
+  parents = [<span class="var">t1</span>],
+  body = <span class="str">"Deploy em staging. Rode smoke tests. Bloqueie para aprovação humana."</span>
+)
+
+<span class="cmt"># Worker executa deploy em staging e bloqueia:</span>
+<span class="cmt"># kanban_block("Staging OK. Aprovar deploy para produção?")</span>
+<span class="cmt"># → Operador verifica staging e aprova via /unblock</span>
+
+<span class="var">t3</span> = <span class="fn">kanban_create</span>(
+  title = <span class="str">"Deploy produção"</span>,
+  assignee = <span class="str">"ops"</span>,
+  parents = [<span class="var">t2</span>],
+  body = <span class="str">"Deploy em produção. Rollback automático se health check falhar."</span>
+)</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLI Reference -->
+<section>
+  <div class="container">
+    <h2><span class="num">08</span>Referência CLI</h2>
+    <p class="subtitle">Comandos do terminal para gerenciar o board manualmente.</p>
+
+    <div class="cli-list">
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban create "título" --assignee researcher</span>
+        <span class="cli-desc">Criar tarefa</span>
+      </div>
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban create "título" --assignee analyst --parent T1</span>
+        <span class="cli-desc">Criar com dependência</span>
+      </div>
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban show &lt;id&gt;</span>
+        <span class="cli-desc">Ver detalhes da tarefa</span>
+      </div>
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban complete &lt;id&gt; --summary "feito"</span>
+        <span class="cli-desc">Completar tarefa</span>
+      </div>
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban block &lt;id&gt; "preciso de X"</span>
+        <span class="cli-desc">Bloquear para aprovação humana</span>
+      </div>
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban link --parent T1 --child T3</span>
+        <span class="cli-desc">Criar dependência entre tarefas</span>
+      </div>
+      <div class="cli-item">
+        <span class="cli-cmd">hermes kanban tail &lt;id&gt;</span>
+        <span class="cli-desc">Acompanhar output em tempo real</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Worker Handoff -->
+<section>
+  <div class="container">
+    <h2><span class="num">09</span>Handoff Entre Workers</h2>
+    <p class="subtitle">O summary + metadata é o contrato entre agentes — shape importa.</p>
+
+    <div class="demo-panel">
+      <div class="demo-tabs">
+        <button class="demo-tab active" onclick="showHandoff(0)">Coding</button>
+        <button class="demo-tab" onclick="showHandoff(1)">Research</button>
+        <button class="demo-tab" onclick="showHandoff(2)">Review</button>
+      </div>
+
+      <div class="demo-content active" id="handoff0">
+        <div class="code-block"><pre><span class="fn">kanban_complete</span>(
+  summary = <span class="str">"shipped rate limiter — token bucket, keys on user_id com IP fallback, 14 testes passando"</span>,
+  metadata = {
+    <span class="str">"changed_files"</span>: [<span class="str">"rate_limiter.py"</span>, <span class="str">"tests/test_rate_limiter.py"</span>],
+    <span class="str">"tests_run"</span>: <span class="num">14</span>,
+    <span class="str">"tests_passed"</span>: <span class="num">14</span>,
+    <span class="str">"decisions"</span>: [<span class="str">"user_id primary, IP fallback para unauthenticated"</span>]
+  }
+)</pre></div>
+      </div>
+      <div class="demo-content" id="handoff1">
+        <div class="code-block"><pre><span class="fn">kanban_complete</span>(
+  summary = <span class="str">"3 libs revisadas; vLLM wins em throughput, SGLang em latency, TRT-LLM em memória"</span>,
+  metadata = {
+    <span class="str">"sources_read"</span>: <span class="num">12</span>,
+    <span class="str">"recommendation"</span>: <span class="str">"vLLM"</span>,
+    <span class="str">"benchmarks"</span>: {<span class="str">"vllm"</span>: <span class="num">1.0</span>, <span class="str">"sglang"</span>: <span class="num">0.87</span>, <span class="str">"trtllm"</span>: <span class="num">0.72</span>}
+  }
+)</pre></div>
+      </div>
+      <div class="demo-content" id="handoff2">
+        <div class="code-block"><pre><span class="fn">kanban_complete</span>(
+  summary = <span class="str">"reviewed PR #123; 2 issues bloqueantes (SQL injection, CSRF faltando)"</span>,
+  metadata = {
+    <span class="str">"pr_number"</span>: <span class="num">123</span>,
+    <span class="str">"findings"</span>: [
+      {<span class="str">"severity"</span>: <span class="str">"critical"</span>, <span class="str">"file"</span>: <span class="str">"api/search.py"</span>, <span class="str">"line"</span>: <span class="num">42</span>},
+      {<span class="str">"severity"</span>: <span class="str">"high"</span>, <span class="str">"file"</span>: <span class="str">"api/settings.py"</span>}
+    ],
+    <span class="str">"approved"</span>: <span class="kw">False</span>
+  }
+)</pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    Hermes Kanban — Sistema de tarefas distribuídas para agentes AI 🚀
+  </div>
+</footer>
+
+<script>
+// Flow animation
+let currentStep = 0;
+const steps = ['f1','f2','f3','f4','f5','f6'];
+setInterval(() => {
+  steps.forEach(s => document.getElementById(s).classList.remove('active'));
+  currentStep = (currentStep + 1) % steps.length;
+  document.getElementById(steps[currentStep]).classList.add('active');
+}, 2000);
+
+// Demo tabs
+function showDemo(idx) {
+  document.querySelectorAll('.demo-tab').forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+  document.querySelectorAll('.demo-content').forEach((c, i) => {
+    c.classList.toggle('active', i === idx);
+  });
+}
+
+// Handoff tabs
+function showHandoff(idx) {
+  const section = document.getElementById('handoff0').parentElement;
+  const tabs = section.parentElement.querySelectorAll('.demo-tab');
+  const contents = section.parentElement.querySelectorAll('.demo-content');
+  tabs.forEach((t, i) => t.classList.toggle('active', i === idx));
+  contents.forEach((c, i) => c.classList.toggle('active', i === idx));
+}
+</script>
+
+</body>
+</html>
