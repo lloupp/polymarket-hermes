@@ -1,13 +1,24 @@
 # Operator cycle
 
 ## Estado atual
-Fluxo do observer mantido, com dashboard operacional lendo o último histórico salvo por padrão e opção explícita de execução live pela UI. O enrichment de forecast diferencia origem `live` de `history_fallback` quando o Open-Meteo responde com rate limit. Para experimentos paper financeiramente comparáveis, o observer deve ser executado com `--wallet-state-path` para preservar carteira, posições e PnL entre ciclos.
+Fluxo do observer com resolução de mercado integrada. Quando um mercado resolve (closed + winningOutcome na Gamma API), a posição fecha com `exitReason='market_resolved'` e preço binário (1.0 ou 0.0). A checagem de resolução acontece antes de `market_expired`/`take_profit`/`timeout`, garantindo que posições resolvidas sempre usem o preço correto. Win rate é calculado e exposto no output, dashboard e cycle record. Wallet state persiste por default em `./paper-wallet-state.json`.
 
-## Mudança operacional aplicada à carteira paper
-- `src/operator/paper-observer-runtime.ts` aceita `--wallet-state-path=<arquivo.json>`.
-- Quando a flag é informada, cada ciclo carrega o estado da carteira antes de executar o operador e grava o estado atualizado ao final.
-- O arquivo de estado guarda capital inicial, caixa, PnL realizado, posições abertas/fechadas e próximo id.
-- Se o arquivo ainda não existir, o ciclo começa com a carteira inicial e cria o JSON ao final.
+## Mudança operacional — Market Resolution
+- `closePaperPositions()` agora é `async` e consulta `fetchMarketResolution(marketId)`.
+- Se `resolution.closed && resolution.winningOutcome`, posição fecha com `exitReason='market_resolved'` e `exitPrice = getResolutionExitPrice(outcome, resolution)`.
+- Exit price binário: YES→1.0/0.0, NO→0.0/1.0 baseado no winningOutcome.
+- O `marketResolutionFetcher` é injetável (default: `fetchMarketResolution` da Gamma API).
+- Ordem de prioridade: `market_resolved` > `market_expired` > `take_profit`/`timeout`.
+
+## Mudança operacional — Win Rate
+- `computeWinRate(allPositions)` filtra posições `CLOSED` com `exitReason='market_resolved'`.
+- Win = realizedPnl > 0, Loss = realizedPnl <= 0.
+- Exposto em `result.winRate`, output lines (`win_rate=`, `win_rate_resolved=`, etc.), dashboard summary cards (Win Rate, Resolved Wins, Win Rate PnL) e `PaperObserverCycleRecord`.
+
+## Mudança operacional — Wallet State Persistência
+- `--wallet-state-path` agora defaulta para `./paper-wallet-state.json`.
+- Wallet persiste automaticamente entre ciclos sem flag explícita.
+- Primeiro ciclo sem arquivo cria o JSON; ciclos subsequentes carregam o estado salvo.
 - Sem `--wallet-state-path`, a execução continua stateless: posições e PnL não persistem entre ciclos.
 - O operador não abre nova posição para um mercado que já tenha posição `OPEN`, evitando empilhar exposições duplicadas no mesmo mercado.
 - Quando a Gamma/Polymarket marca um market como `closed=true`, o operador fecha qualquer posição `OPEN` daquele mercado com `exitReason=resolution` e preço final do outcome.

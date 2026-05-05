@@ -1,5 +1,30 @@
 # Implementation log
 
+## 2026-05-05 — Market Resolution + Win Rate Lifecycle (T1-T5)
+
+### O que foi criado/adaptado
+- **T1**: `closePaperPositions()` agora é `async` e aceita `marketResolutionFetcher`. Quando o mercado está resolvido (`resolution.closed && resolution.winningOutcome`), a posição fecha com `exitReason='market_resolved'` e `exitPrice` binário (1.0 ou 0.0) via `getResolutionExitPrice()`. Checagem de resolução acontece ANTES de `market_expired`/`take_profit`/`timeout`.
+- **T2**: `--wallet-state-path` agora **defaulta para `./paper-wallet-state.json`** — a carteira persiste automaticamente entre ciclos sem necessidade de flag explícita.
+- **T3** (já existia): `src/paper/win-rate-tracker.ts` — `computeWinRate()`.
+- **T4**: Win rate integrado no output do ciclo (`win_rate=`, `win_rate_resolved=`, `win_rate_wins=`, `win_rate_losses=`, `win_rate_pnl=`), no dashboard (3 summary cards: Win Rate, Resolved Wins, Win Rate PnL) e no `PaperObserverCycleRecord` (campos opcionais `winRate`, `winRateResolved`, etc.).
+- **T5**: 2 integration tests cobrindo lifecycle completo: open → market resolves YES (win) e open → market resolves NO (loss), verificando exitPrice, realizedPnl, winRate, outputLines e dashboard cards.
+
+### O que já funciona
+- `runSimpleWeatherOperator()` retorna `winRate: WinRateResult` no resultado.
+- `closePaperPositions()` consulta `fetchMarketResolution()` (padrão) ou fetcher customizável (testes).
+- Dashboard mostra Win Rate / Resolved Wins / Win Rate PnL quando há posições resolvidas.
+- Wallet state persiste por default em `./paper-wallet-state.json`.
+- Runtime passa `fetchMarketResolution` como fetcher padrão para o operator.
+
+### Resultado de testes
+- 147 testes passando (19 arquivos), incluindo 2 novos lifecycle tests.
+- `npx vitest run` → verde.
+
+### Próximos passos sugeridos
+- Reativar paper observer com as mudanças e observar win rate em mercados reais.
+- Considerar separar win rate cumulativo (entre sessões) do win rate do ciclo atual.
+- Adicionar suporte a NO outcome no seed para testar resolução de posições BUY_NO.
+
 ## 2026-05-05 — Win Rate Tracker para paper trading
 
 ### O que foi criado

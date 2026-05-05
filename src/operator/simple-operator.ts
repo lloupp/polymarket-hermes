@@ -1,9 +1,11 @@
 import { buildDashboardViewModel, type DashboardViewModel } from '../dashboard/view-model';
 import { readLatestForecastFallback, writeOperatorHistory } from '../history/operator-history';
 import { fetchGammaMarkets } from '../ingestion/polymarket';
+import { getResolutionExitPrice, type MarketResolution } from '../ingestion/market-resolution';
 
 import { buildMarketSnapshot, type MarketSnapshot } from './market-snapshot';
 import { PaperWallet } from '../paper/paper-wallet';
+import { computeWinRate, type WinRateResult } from '../paper/win-rate-tracker';
 import type { OperationalBlockReason, PaperPosition, PositionOutcome } from '../types/market';
 import type { PaperWalletState } from '../types/paper';
 import {
@@ -73,6 +75,7 @@ export interface RunSimpleWeatherOperatorOptions {
   publicSearchFetcher?: (query: string) => Promise<unknown>;
   weatherFetcher?: () => Promise<unknown>;
   forecastProvider?: WeatherForecastProvider;
+ marketResolutionFetcher?: (marketId: string) => Promise<MarketResolution>;
 
 }
 
@@ -85,16 +88,17 @@ export interface OperationalBlock {
 }
 
 export interface SimpleWeatherOperatorResult {
-  snapshot: MarketSnapshot;
-  weatherEnrichment: WeatherMarketEnrichment[];
-  decisions: WeatherMarketDecision[];
-  executedPositions: PaperPosition[];
-  closedPositions: PaperPosition[];
-  operationalBlocks: OperationalBlock[];
-  dashboard: DashboardViewModel;
-  outputLines: string[];
-  historyFilePath?: string;
-  walletState: PaperWalletState;
+ snapshot: MarketSnapshot;
+ weatherEnrichment: WeatherMarketEnrichment[];
+ decisions: WeatherMarketDecision[];
+ executedPositions: PaperPosition[];
+ closedPositions: PaperPosition[];
+ operationalBlocks: OperationalBlock[];
+ dashboard: DashboardViewModel;
+ outputLines: string[];
+ historyFilePath?: string;
+ walletState: PaperWalletState;
+ winRate: WinRateResult;
 }
 
 async function enrichWeatherMarkets(
@@ -400,32 +404,51 @@ function shouldTimeout(position: PaperPosition, nowIso: string, maxHoldingHours:
   return holdingMs >= maxHoldingHours * 60 * 60 * 1000;
 }
 
-function closePaperPositions(input: {
-  wallet: PaperWallet;
-  snapshot: MarketSnapshot;
-  nowIso?: string;
-  takeProfitPct?: number;
-  maxHoldingHours?: number;
-  
-}): PaperPosition[] {
-  const { nowIso, takeProfitPct, maxHoldingHours } = input;
+async function closePaperPositions(input: {
+ wallet: PaperWallet;
+ snapshot: MarketSnapshot;
+ nowIso?: string;
+ takeProfitPct?: number;
+ maxHoldingHours?: number;
+ marketResolutionFetcher?: (marketId: string) => Promise<MarketResolution>;
+}): Promise<PaperPosition[]> {
+ const { nowIso, takeProfitPct, maxHoldingHours, marketResolutionFetcher } = input;
 
-  if (!nowIso) {
-    return [];
+ if (!nowIso) {
+  return [];
+ }
+
+ const closed: PaperPosition[] = [];
+ const nowMs = Date.parse(nowIso);
+
+ for (const position of input.wallet.listPositions()) {
+  if (position.status !== 'OPEN') {
+   continue;
   }
 
-  const closed: PaperPosition[] = [];
-  const nowMs = Date.parse(nowIso);
+  const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === position.marketId);
 
-  for (const position of input.wallet.listPositions()) {
-    if (position.status !== 'OPEN') {
-      continue;
+  // 0. Check if market has resolved (closed on Gamma API) — close at resolution price (1.0 or 0.0)
+  if (marketResolutionFetcher && market) {
+   const resolution = await marketResolutionFetcher(market.id);
+   if (resolution?.closed && resolution.winningOutcome) {
+    const exitPrice = getResolutionExitPrice(position.outcome, resolution);
+    if (exitPrice !== undefined) {
+     closed.push(
+      input.wallet.closePosition({
+       positionId: position.id,
+       exitPrice,
+       closedAt: nowIso,
+       exitReason: 'market_resolved',
+      }),
+     );
+     continue;
     }
+   }
+  }
 
-    const market = input.snapshot.weatherMarkets.find((candidate) => candidate.id === position.marketId);
-
-    // 1. Check if the market has expired (closesAt in the past) — close at current price
-    if (market?.closesAt && Date.parse(market.closesAt) < nowMs) {
+  // 1. Check if the market has expired (closesAt in the past) — close at current price
+  if (market?.closesAt && Date.parse(market.closesAt) < nowMs) {
       const exitPrice = position.outcome === 'YES' ? market.yesPrice : market.noPrice;
       closed.push(
         input.wallet.closePosition({
@@ -537,35 +560,42 @@ function buildWeatherDiscoveryQuerySummary(markets: MarketSnapshot['weatherMarke
 }
 
 function buildOutputLines(result: {
-  snapshot: MarketSnapshot;
-  weatherEnrichment: WeatherMarketEnrichment[];
-  decisions: WeatherMarketDecision[];
-  executedPositions: PaperPosition[];
-  closedPositions: PaperPosition[];
-  operationalBlocks: OperationalBlock[];
-  rateLimitCount: number;
-  fallbackCount: number;
-  fallbackMissCount: number;
+ snapshot: MarketSnapshot;
+ weatherEnrichment: WeatherMarketEnrichment[];
+ decisions: WeatherMarketDecision[];
+ executedPositions: PaperPosition[];
+ closedPositions: PaperPosition[];
+ operationalBlocks: OperationalBlock[];
+ rateLimitCount: number;
+ fallbackCount: number;
+ fallbackMissCount: number;
+ winRate: WinRateResult;
 }): string[] {
-  const approvedSignals = result.decisions.filter((decision) => decision.signal !== 'HOLD').length;
-  const blockedSignals = result.decisions.length - approvedSignals;
+ const approvedSignals = result.decisions.filter((decision) => decision.signal !== 'HOLD').length;
+ const blockedSignals = result.decisions.length - approvedSignals;
+ const wr = result.winRate;
 
-  return [
-    `markets_total=${result.snapshot.totalMarkets}`,
-    `weather_markets=${result.snapshot.weatherMarketCount}`,
-    `weather_forecasts=${result.weatherEnrichment.length}`,
-    `forecast_rate_limits=${result.rateLimitCount}`,
-    `forecast_fallbacks=${result.fallbackCount}`,
-    `forecast_fallback_misses=${result.fallbackMissCount}`,
-    `weather_discovery_breakdown=${buildWeatherDiscoveryBreakdown(result.snapshot.weatherMarkets)}`,
-    `weather_discovery_queries=${buildWeatherDiscoveryQuerySummary(result.snapshot.weatherMarkets)}`,
-    `signals_approved=${approvedSignals}`,
-    `signals_blocked=${blockedSignals}`,
-    `positions_opened=${result.executedPositions.length}`,
-    `positions_closed=${result.closedPositions.length}`,
-    `closed_position_exit_reasons=${buildClosedExitReasonSummary(result.closedPositions)}`,
-    `operational_blocks=${buildOperationalBlockSummary(result.operationalBlocks)}`,
-  ];
+ return [
+ `markets_total=${result.snapshot.totalMarkets}`,
+ `weather_markets=${result.snapshot.weatherMarketCount}`,
+ `weather_forecasts=${result.weatherEnrichment.length}`,
+ `forecast_rate_limits=${result.rateLimitCount}`,
+ `forecast_fallbacks=${result.fallbackCount}`,
+ `forecast_fallback_misses=${result.fallbackMissCount}`,
+ `weather_discovery_breakdown=${buildWeatherDiscoveryBreakdown(result.snapshot.weatherMarkets)}`,
+ `weather_discovery_queries=${buildWeatherDiscoveryQuerySummary(result.snapshot.weatherMarkets)}`,
+ `signals_approved=${approvedSignals}`,
+ `signals_blocked=${blockedSignals}`,
+ `positions_opened=${result.executedPositions.length}`,
+ `positions_closed=${result.closedPositions.length}`,
+ `closed_position_exit_reasons=${buildClosedExitReasonSummary(result.closedPositions)}`,
+ `operational_blocks=${buildOperationalBlockSummary(result.operationalBlocks)}`,
+ `win_rate=${(wr.winRate * 100).toFixed(1)}%`,
+ `win_rate_resolved=${wr.totalResolved}`,
+ `win_rate_wins=${wr.wins}`,
+ `win_rate_losses=${wr.losses}`,
+ `win_rate_pnl=${wr.totalPnl.toFixed(2)}`,
+ ];
 }
 
 function formatDecisionLine(decision: WeatherMarketDecision): string {
@@ -609,38 +639,42 @@ export async function runSimpleWeatherOperator(
     minRepricingEdge: options.minRepricingEdge,
   });
 
-  const closedPositions = closePaperPositions({
-      wallet,
-      snapshot,
-      nowIso: options.nowIso,
-      takeProfitPct: options.takeProfitPct,
-      maxHoldingHours: options.maxHoldingHours,
-    });
+ const closedPositions = await closePaperPositions({
+ wallet,
+ snapshot,
+ nowIso: options.nowIso,
+ takeProfitPct: options.takeProfitPct,
+ maxHoldingHours: options.maxHoldingHours,
+ marketResolutionFetcher: options.marketResolutionFetcher,
+ });
   const approvedSignals = decisions.filter((decision) => decision.signal !== 'HOLD').length;
   const blockedSignals = decisions.length - approvedSignals;
 
-  const allPositions = wallet.listPositions();
-  const dashboard = buildDashboardViewModel({
-    wallet: wallet.snapshot(),
-    positions: allPositions,
-    analyzedMarkets: snapshot.weatherMarkets,
-    approvedSignals,
-    blockedSignals,
-    closedPositions: closedPositions.length,
-    operationalBlocks,
-    recentDecisions: decisions.map(formatDecisionLine),
-  });
-  const outputLines = buildOutputLines({
-    snapshot,
-    weatherEnrichment,
-    decisions,
-    executedPositions,
-    closedPositions,
-    operationalBlocks,
-    rateLimitCount: weatherResult.rateLimitCount,
-    fallbackCount: weatherResult.fallbackCount,
-    fallbackMissCount: weatherResult.fallbackMissCount,
-  });
+ const allPositions = wallet.listPositions();
+ const winRate = computeWinRate(allPositions);
+ const dashboard = buildDashboardViewModel({
+ wallet: wallet.snapshot(),
+ positions: allPositions,
+ analyzedMarkets: snapshot.weatherMarkets,
+ approvedSignals,
+ blockedSignals,
+ closedPositions: closedPositions.length,
+ operationalBlocks,
+ recentDecisions: decisions.map(formatDecisionLine),
+ winRate,
+ });
+ const outputLines = buildOutputLines({
+ snapshot,
+ weatherEnrichment,
+ decisions,
+ executedPositions,
+ closedPositions,
+ operationalBlocks,
+ rateLimitCount: weatherResult.rateLimitCount,
+ fallbackCount: weatherResult.fallbackCount,
+ fallbackMissCount: weatherResult.fallbackMissCount,
+ winRate,
+ });
 
   const walletSnapshot = wallet.snapshot();
 
@@ -660,18 +694,19 @@ export async function runSimpleWeatherOperator(
       })
     : undefined;
 
-  const result = {
-    snapshot,
-    weatherEnrichment,
-    decisions,
-    executedPositions,
-    closedPositions,
-    operationalBlocks,
-    dashboard,
-    outputLines,
-    historyFilePath,
-    walletState: wallet.exportState(),
-  } satisfies SimpleWeatherOperatorResult;
+ const result = {
+ snapshot,
+ weatherEnrichment,
+ decisions,
+ executedPositions,
+ closedPositions,
+ operationalBlocks,
+ dashboard,
+ outputLines,
+ historyFilePath,
+ walletState: wallet.exportState(),
+ winRate,
+ } satisfies SimpleWeatherOperatorResult;
 
   return result;
 }

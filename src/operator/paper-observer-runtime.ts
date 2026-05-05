@@ -1,11 +1,12 @@
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import {
-  runSimpleWeatherOperator,
-  type RunSimpleWeatherOperatorOptions,
-  type SimpleWeatherOperatorResult,
-  type WeatherLocationConfig,
+ runSimpleWeatherOperator,
+ type RunSimpleWeatherOperatorOptions,
+ type SimpleWeatherOperatorResult,
+ type WeatherLocationConfig,
 } from './simple-operator';
+import { fetchMarketResolution } from '../ingestion/market-resolution';
 import type { PaperWalletState } from '../types/paper';
 
 export interface PaperObserverCliOptions extends RunSimpleWeatherOperatorOptions {
@@ -29,6 +30,11 @@ export interface PaperObserverCycleRecord {
  positionsOpened: number;
  positionsClosed: number;
  historyFilePath?: string;
+ winRate?: number;
+ winRateResolved?: number;
+ winRateWins?: number;
+ winRateLosses?: number;
+ winRatePnl?: number;
 }
 
 export interface PaperObserverCycleResult {
@@ -137,6 +143,7 @@ export function buildPaperObserverCliOptions(args: string[]): PaperObserverCliOp
 function buildCycleRecord(runAt: string, result: SimpleWeatherOperatorResult): PaperObserverCycleRecord {
  const signalsApproved = result.decisions.filter((decision) => decision.signal !== 'HOLD').length;
  const signalsBlocked = result.decisions.length - signalsApproved;
+ const wr = result.winRate;
 
  return {
  runAt,
@@ -148,6 +155,11 @@ function buildCycleRecord(runAt: string, result: SimpleWeatherOperatorResult): P
  positionsOpened: result.executedPositions.length,
  positionsClosed: result.closedPositions.length,
  historyFilePath: result.historyFilePath,
+ winRate: wr.totalResolved > 0 ? wr.winRate : undefined,
+ winRateResolved: wr.totalResolved > 0 ? wr.totalResolved : undefined,
+ winRateWins: wr.totalResolved > 0 ? wr.wins : undefined,
+ winRateLosses: wr.totalResolved > 0 ? wr.losses : undefined,
+ winRatePnl: wr.totalResolved > 0 ? wr.totalPnl : undefined,
  };
 }
 
@@ -159,29 +171,24 @@ async function appendCycleRecord(runtimeLogPath: string, record: PaperObserverCy
 
 
 async function readWalletState(walletStatePath: string | undefined): Promise<PaperWalletState | undefined> {
- if (!walletStatePath) {
- return undefined;
- }
+ const resolvedPath = walletStatePath ?? './paper-wallet-state.json';
 
  try {
- const content = await readFile(walletStatePath, 'utf8');
- return JSON.parse(content) as PaperWalletState;
+  const content = await readFile(resolvedPath, 'utf8');
+  return JSON.parse(content) as PaperWalletState;
  } catch (error) {
- if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
- return undefined;
- }
+  if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT') {
+   return undefined;
+  }
 
- throw error;
+  throw error;
  }
 }
 
 async function writeWalletState(walletStatePath: string | undefined, state: PaperWalletState): Promise<void> {
- if (!walletStatePath) {
- return;
- }
-
- await mkdir(dirname(walletStatePath), { recursive: true });
- await writeFile(walletStatePath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+ const resolvedPath = walletStatePath ?? './paper-wallet-state.json';
+ await mkdir(dirname(resolvedPath), { recursive: true });
+ await writeFile(resolvedPath, `${JSON.stringify(state, null, 2)}\n`, 'utf8');
 }
 
 export async function runPaperObserverCycle(
@@ -191,28 +198,29 @@ export async function runPaperObserverCycle(
 
   const walletState = await readWalletState(options.walletStatePath);
 
-  const result = await runSimpleWeatherOperator({
-    startingCapital: options.startingCapital,
-    marketLimit: options.marketLimit,
-    forecastDays: options.forecastDays,
-    minEdge: options.minEdge,
-    kellyFraction: options.kellyFraction,
-    maxPositionUsd: options.maxPositionUsd,
-    minYesPrice: options.minYesPrice,
-    minRepricingEdge: options.minRepricingEdge,
-    takeProfitPct: options.takeProfitPct,
-    maxHoldingHours: options.maxHoldingHours,
-    nowIso: runAt,
-    historyDir: options.historyDir,
-    seedPositions: options.seedPositions,
-    walletState,
-    weatherLocations: options.weatherLocations,
-    searchQueries: options.searchQueries,
-    gammaFetcher: options.gammaFetcher,
-    publicSearchFetcher: options.publicSearchFetcher,
-    weatherFetcher: options.weatherFetcher,
-    forecastProvider: options.forecastProvider,
-  });
+ const result = await runSimpleWeatherOperator({
+ startingCapital: options.startingCapital,
+ marketLimit: options.marketLimit,
+ forecastDays: options.forecastDays,
+ minEdge: options.minEdge,
+ kellyFraction: options.kellyFraction,
+ maxPositionUsd: options.maxPositionUsd,
+ minYesPrice: options.minYesPrice,
+ minRepricingEdge: options.minRepricingEdge,
+ takeProfitPct: options.takeProfitPct,
+ maxHoldingHours: options.maxHoldingHours,
+ nowIso: runAt,
+ historyDir: options.historyDir,
+ seedPositions: options.seedPositions,
+ walletState,
+ weatherLocations: options.weatherLocations,
+ searchQueries: options.searchQueries,
+ gammaFetcher: options.gammaFetcher,
+ publicSearchFetcher: options.publicSearchFetcher,
+ weatherFetcher: options.weatherFetcher,
+ forecastProvider: options.forecastProvider,
+ marketResolutionFetcher: options.marketResolutionFetcher ?? fetchMarketResolution,
+ });
 
  const record = buildCycleRecord(runAt, result);
  record.historyDir = options.historyDir;

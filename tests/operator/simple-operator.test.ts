@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { writeOperatorHistory } from '../../src/history/operator-history';
 import { runSimpleWeatherOperator } from '../../src/operator/simple-operator';
 import type { GammaMarketRecord } from '../../src/ingestion/polymarket';
+import type { MarketResolution } from '../../src/ingestion/market-resolution';
 
 describe('runSimpleWeatherOperator', () => {
   it('closes seeded open position by take-profit target', async () => {
@@ -1284,12 +1285,368 @@ it('does not close position when market has not expired yet', async () => {
         }),
       });
 
-      // No positions should be closed — market hasn't expired, no take-profit/timeout hit
-      const seededClosed = result.closedPositions.filter(
-        (p) => p.entryPrice === 0.40 && p.shares === 10,
-      );
-      expect(seededClosed).toHaveLength(0);
-    });
+ // No positions should be closed — market hasn't expired, no take-profit/timeout hit
+ const seededClosed = result.closedPositions.filter(
+ (p) => p.entryPrice === 0.40 && p.shares === 10,
+ );
+ expect(seededClosed).toHaveLength(0);
+ });
+
+ it('closes a YES position at exitPrice=1.0 with exitReason=market_resolved when market resolves YES', async () => {
+ const gammaPayload: GammaMarketRecord[] = [
+ {
+ id: 'w1',
+ slug: 'nyc-rain',
+ question: 'Will it rain in NYC tomorrow?',
+ endDate: '2026-05-10T00:00:00Z',
+ liquidity: '15000',
+ volume24hr: '4000',
+ tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'rain', label: 'Rain' }],
+ outcomes: '[\"Yes\",\"No\"]',
+ outcomePrices: '[\"0.55\",\"0.45\"]',
+ category: 'weather',
+ },
+ ];
+
+ const resolutionMap: Record<string, MarketResolution> = {
+ w1: { marketId: 'w1', closed: true, yesPrice: 1, noPrice: 0, winningOutcome: 'YES' },
+ };
+
+ const result = await runSimpleWeatherOperator({
+ startingCapital: 1000,
+ marketLimit: 10,
+ forecastDays: 2,
+ minEdge: 0.03,
+ kellyFraction: 0.5,
+ maxPositionUsd: 100,
+ nowIso: '2026-05-01T12:00:00Z',
+ seedPositions: [
+ {
+ marketId: 'w1',
+ outcome: 'YES',
+ entryPrice: 0.50,
+ shares: 20,
+ openedAt: '2026-05-01T06:00:00Z',
+ },
+ ],
+ weatherLocations: [
+ { marketId: 'w1', latitude: 40.71, longitude: -74.01, label: 'New York City' },
+ ],
+ gammaFetcher: async () => gammaPayload,
+ weatherFetcher: async () => ({
+ latitude: 40.71,
+ longitude: -74.01,
+ timezone: 'America/New_York',
+ daily: {
+ time: ['2026-05-01', '2026-05-02'],
+ temperature_2m_max: [22, 19],
+ temperature_2m_min: [15, 13],
+ precipitation_probability_max: [78, 66],
+ precipitation_sum: [12, 6],
+ wind_speed_10m_max: [25, 19],
+ },
+ }),
+ marketResolutionFetcher: async (marketId: string) => resolutionMap[marketId] ?? { marketId, closed: false, yesPrice: 0, noPrice: 0 },
+ });
+
+ expect(result.closedPositions).toHaveLength(1);
+ expect(result.closedPositions[0]?.exitPrice).toBe(1.0);
+ expect(result.closedPositions[0]?.exitReason).toBe('market_resolved');
+ expect(result.closedPositions[0]?.realizedPnl).toBeCloseTo(10.0, 8); // (1.0 - 0.50) * 20
+ expect(result.closedPositions[0]?.status).toBe('CLOSED');
+ });
+
+ it('closes a YES position at exitPrice=0.0 with exitReason=market_resolved when market resolves NO', async () => {
+ const gammaPayload: GammaMarketRecord[] = [
+ {
+ id: 'w1',
+ slug: 'nyc-rain',
+ question: 'Will it rain in NYC tomorrow?',
+ endDate: '2026-05-10T00:00:00Z',
+ liquidity: '15000',
+ volume24hr: '4000',
+ tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'rain', label: 'Rain' }],
+ outcomes: '[\"Yes\",\"No\"]',
+ outcomePrices: '[\"0.55\",\"0.45\"]',
+ category: 'weather',
+ },
+ ];
+
+ const resolutionMap: Record<string, MarketResolution> = {
+ w1: { marketId: 'w1', closed: true, yesPrice: 0, noPrice: 1, winningOutcome: 'NO' },
+ };
+
+ const result = await runSimpleWeatherOperator({
+ startingCapital: 1000,
+ marketLimit: 10,
+ forecastDays: 2,
+ minEdge: 0.03,
+ kellyFraction: 0.5,
+ maxPositionUsd: 100,
+ nowIso: '2026-05-01T12:00:00Z',
+ seedPositions: [
+ {
+ marketId: 'w1',
+ outcome: 'YES',
+ entryPrice: 0.50,
+ shares: 20,
+ openedAt: '2026-05-01T06:00:00Z',
+ },
+ ],
+ weatherLocations: [
+ { marketId: 'w1', latitude: 40.71, longitude: -74.01, label: 'New York City' },
+ ],
+ gammaFetcher: async () => gammaPayload,
+ weatherFetcher: async () => ({
+ latitude: 40.71,
+ longitude: -74.01,
+ timezone: 'America/New_York',
+ daily: {
+ time: ['2026-05-01', '2026-05-02'],
+ temperature_2m_max: [22, 19],
+ temperature_2m_min: [15, 13],
+ precipitation_probability_max: [78, 66],
+ precipitation_sum: [12, 6],
+ wind_speed_10m_max: [25, 19],
+ },
+ }),
+ marketResolutionFetcher: async (marketId: string) => resolutionMap[marketId] ?? { marketId, closed: false, yesPrice: 0, noPrice: 0 },
+ });
+
+ expect(result.closedPositions).toHaveLength(1);
+ expect(result.closedPositions[0]?.exitPrice).toBe(0.0);
+ expect(result.closedPositions[0]?.exitReason).toBe('market_resolved');
+ expect(result.closedPositions[0]?.realizedPnl).toBeCloseTo(-10.0, 8); // (0.0 - 0.50) * 20
+ expect(result.closedPositions[0]?.status).toBe('CLOSED');
+ });
+
+ it('does not close a position when market is not resolved (closed=false)', async () => {
+ const gammaPayload: GammaMarketRecord[] = [
+ {
+ id: 'w1',
+ slug: 'nyc-rain',
+ question: 'Will it rain in NYC tomorrow?',
+ endDate: '2026-05-10T00:00:00Z',
+ liquidity: '15000',
+ volume24hr: '4000',
+ tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'rain', label: 'Rain' }],
+ outcomes: '[\"Yes\",\"No\"]',
+ outcomePrices: '[\"0.55\",\"0.45\"]',
+ category: 'weather',
+ },
+ ];
+
+ const resolutionMap: Record<string, MarketResolution> = {
+ w1: { marketId: 'w1', closed: false, yesPrice: 0.55, noPrice: 0.45 },
+ };
+
+ const result = await runSimpleWeatherOperator({
+ startingCapital: 1000,
+ marketLimit: 10,
+ forecastDays: 2,
+ minEdge: 0.03,
+ kellyFraction: 0.5,
+ maxPositionUsd: 100,
+ nowIso: '2026-05-01T12:00:00Z',
+ seedPositions: [
+ {
+ marketId: 'w1',
+ outcome: 'YES',
+ entryPrice: 0.50,
+ shares: 20,
+ openedAt: '2026-05-01T06:00:00Z',
+ },
+ ],
+ weatherLocations: [
+ { marketId: 'w1', latitude: 40.71, longitude: -74.01, label: 'New York City' },
+ ],
+ gammaFetcher: async () => gammaPayload,
+ weatherFetcher: async () => ({
+ latitude: 40.71,
+ longitude: -74.01,
+ timezone: 'America/New_York',
+ daily: {
+ time: ['2026-05-01', '2026-05-02'],
+ temperature_2m_max: [22, 19],
+ temperature_2m_min: [15, 13],
+ precipitation_probability_max: [78, 66],
+ precipitation_sum: [12, 6],
+ wind_speed_10m_max: [25, 19],
+ },
+ }),
+ marketResolutionFetcher: async (marketId: string) => resolutionMap[marketId] ?? { marketId, closed: false, yesPrice: 0, noPrice: 0 },
+ });
+
+ // Position should stay OPEN — market not resolved, not expired, no take-profit/timeout
+ expect(result.closedPositions).toHaveLength(0);
+ const openPositions = result.executedPositions.length > 0
+ ? [] // seed positions are in wallet but not in executedPositions
+ : [];
+ // Check via wallet state: there should be 1 open position
+ expect(result.walletState.positions.filter((p) => p.status === 'OPEN')).toHaveLength(1);
+ });
+
+ it('full lifecycle: open position → market resolves → win rate updated', async () => {
+  const gammaPayload: GammaMarketRecord[] = [
+   {
+    id: 'w1',
+    slug: 'nyc-rain',
+    question: 'Will it rain in NYC tomorrow?',
+    endDate: '2026-05-02T00:00:00Z',
+    liquidity: '15000',
+    volume24hr: '4000',
+    tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'rain', label: 'Rain' }],
+    outcomes: '["Yes","No"]',
+    outcomePrices: '["0.42","0.58"]',
+    category: 'weather',
+   },
+  ];
+
+  const resolutionMap: Record<string, MarketResolution> = {
+   w1: { marketId: 'w1', closed: true, yesPrice: 1, noPrice: 0, winningOutcome: 'YES' },
+  };
+
+  const result = await runSimpleWeatherOperator({
+   startingCapital: 1000,
+   marketLimit: 10,
+   forecastDays: 2,
+   minEdge: 0.03,
+   kellyFraction: 0.5,
+   maxPositionUsd: 100,
+   nowIso: '2026-05-01T12:00:00Z',
+   seedPositions: [
+    {
+     marketId: 'w1',
+     outcome: 'YES',
+     entryPrice: 0.42,
+     shares: 10,
+     openedAt: '2026-05-01T06:00:00Z',
+    },
+   ],
+   weatherLocations: [
+    { marketId: 'w1', latitude: 40.71, longitude: -74.01, label: 'New York City' },
+   ],
+   gammaFetcher: async () => gammaPayload,
+   weatherFetcher: async () => ({
+    latitude: 40.71,
+    longitude: -74.01,
+    timezone: 'America/New_York',
+    daily: {
+     time: ['2026-05-01', '2026-05-02'],
+     temperature_2m_max: [22, 19],
+     temperature_2m_min: [15, 13],
+     precipitation_probability_max: [78, 66],
+     precipitation_sum: [12, 6],
+     wind_speed_10m_max: [25, 19],
+    },
+   }),
+   marketResolutionFetcher: async (marketId: string) =>
+    resolutionMap[marketId] ?? { marketId, closed: false, yesPrice: 0, noPrice: 0 },
+  });
+
+  // Position resolved at exit price 1.0 (YES won)
+  expect(result.closedPositions).toHaveLength(1);
+  expect(result.closedPositions[0]?.exitReason).toBe('market_resolved');
+  expect(result.closedPositions[0]?.exitPrice).toBe(1.0);
+  expect(result.closedPositions[0]?.realizedPnl).toBeCloseTo(5.8, 8); // (1.0 - 0.42) * 10
+
+  // Win rate computed correctly
+  expect(result.winRate.totalResolved).toBe(1);
+  expect(result.winRate.wins).toBe(1);
+  expect(result.winRate.losses).toBe(0);
+  expect(result.winRate.winRate).toBe(1);
+  expect(result.winRate.totalPnl).toBeCloseTo(5.8, 8);
+
+  // Output lines include win rate metrics
+  expect(result.outputLines).toContain('win_rate=100.0%');
+  expect(result.outputLines).toContain('win_rate_resolved=1');
+  expect(result.outputLines).toContain('win_rate_wins=1');
+  expect(result.outputLines).toContain('win_rate_losses=0');
+
+  // Dashboard includes win rate cards
+  const winRateCard = result.dashboard.summaryCards.find((c) => c.label === 'Win Rate');
+  expect(winRateCard).toEqual({ label: 'Win Rate', value: '100.0%' });
+
+  const resolvedWinsCard = result.dashboard.summaryCards.find((c) => c.label === 'Resolved Wins');
+  expect(resolvedWinsCard).toEqual({ label: 'Resolved Wins', value: '1/1' });
+ });
+
+ it('full lifecycle: open position → market resolves as loss → win rate reflects loss', async () => {
+  const gammaPayload: GammaMarketRecord[] = [
+   {
+    id: 'w1',
+    slug: 'nyc-rain',
+    question: 'Will it rain in NYC tomorrow?',
+    endDate: '2026-05-02T00:00:00Z',
+    liquidity: '15000',
+    volume24hr: '4000',
+    tags: [{ slug: 'weather', label: 'Weather' }, { slug: 'rain', label: 'Rain' }],
+    outcomes: '["Yes","No"]',
+    outcomePrices: '["0.42","0.58"]',
+    category: 'weather',
+   },
+  ];
+
+  const resolutionMap: Record<string, MarketResolution> = {
+   w1: { marketId: 'w1', closed: true, yesPrice: 0, noPrice: 1, winningOutcome: 'NO' },
+  };
+
+  const result = await runSimpleWeatherOperator({
+   startingCapital: 1000,
+   marketLimit: 10,
+   forecastDays: 2,
+   minEdge: 0.03,
+   kellyFraction: 0.5,
+   maxPositionUsd: 100,
+   nowIso: '2026-05-01T12:00:00Z',
+   seedPositions: [
+    {
+     marketId: 'w1',
+     outcome: 'YES',
+     entryPrice: 0.42,
+     shares: 10,
+     openedAt: '2026-05-01T06:00:00Z',
+    },
+   ],
+   weatherLocations: [
+    { marketId: 'w1', latitude: 40.71, longitude: -74.01, label: 'New York City' },
+   ],
+   gammaFetcher: async () => gammaPayload,
+   weatherFetcher: async () => ({
+    latitude: 40.71,
+    longitude: -74.01,
+    timezone: 'America/New_York',
+    daily: {
+     time: ['2026-05-01', '2026-05-02'],
+     temperature_2m_max: [22, 19],
+     temperature_2m_min: [15, 13],
+     precipitation_probability_max: [78, 66],
+     precipitation_sum: [12, 6],
+     wind_speed_10m_max: [25, 19],
+    },
+   }),
+   marketResolutionFetcher: async (marketId: string) =>
+    resolutionMap[marketId] ?? { marketId, closed: false, yesPrice: 0, noPrice: 0 },
+  });
+
+  // Position resolved at exit price 0.0 (YES lost)
+  expect(result.closedPositions).toHaveLength(1);
+  expect(result.closedPositions[0]?.exitReason).toBe('market_resolved');
+  expect(result.closedPositions[0]?.exitPrice).toBe(0.0);
+  expect(result.closedPositions[0]?.realizedPnl).toBeCloseTo(-4.2, 8); // (0.0 - 0.42) * 10
+
+  // Win rate: 0 wins, 1 loss
+  expect(result.winRate.totalResolved).toBe(1);
+  expect(result.winRate.wins).toBe(0);
+  expect(result.winRate.losses).toBe(1);
+  expect(result.winRate.winRate).toBe(0);
+  expect(result.winRate.totalPnl).toBeCloseTo(-4.2, 8);
+
+  // Output lines
+  expect(result.outputLines).toContain('win_rate=0.0%');
+  expect(result.outputLines).toContain('win_rate_wins=0');
+  expect(result.outputLines).toContain('win_rate_losses=1');
+ });
 
 
 });

@@ -1,5 +1,6 @@
 import type { Market, OperationalBlockReason, PaperPosition } from '../types/market';
 import type { PaperWalletSnapshot } from '../types/paper';
+import type { WinRateResult } from '../paper/win-rate-tracker';
 
 export interface DashboardSummaryCard {
   label: string;
@@ -52,20 +53,21 @@ export interface DashboardViewModel {
 }
 
 export interface BuildDashboardViewModelInput {
-  wallet: PaperWalletSnapshot;
-  positions: PaperPosition[];
-  analyzedMarkets: Market[];
-  approvedSignals: number;
-  blockedSignals: number;
-  closedPositions: number;
-  operationalBlocks: Array<{
-    marketId: string;
-    reason: OperationalBlockReason;
-    yesPrice: number;
-    threshold: number;
-    decisionEdge: number;
-  }>;
-  recentDecisions: string[];
+ wallet: PaperWalletSnapshot;
+ positions: PaperPosition[];
+ analyzedMarkets: Market[];
+ approvedSignals: number;
+ blockedSignals: number;
+ closedPositions: number;
+ operationalBlocks: Array<{
+ marketId: string;
+ reason: OperationalBlockReason;
+ yesPrice: number;
+ threshold: number;
+ decisionEdge: number;
+ }>;
+ recentDecisions: string[];
+ winRate?: WinRateResult;
 }
 
 function formatUsd(value: number): string {
@@ -93,17 +95,24 @@ export function buildDashboardViewModel(input: BuildDashboardViewModelInput): Da
     operationalBlockCounts.set(block.reason, (operationalBlockCounts.get(block.reason) ?? 0) + 1);
   }
 
-  return {
-    summaryCards: [
-      { label: 'Wallet Equity', value: formatUsd(walletEquity) },
-      { label: 'Cash', value: formatUsd(input.wallet.cash) },
-      { label: 'Realized PnL', value: formatUsd(input.wallet.realizedPnl) },
-      { label: 'Open Positions', value: String(input.wallet.openPositions) },
-      { label: 'Closed Positions', value: String(input.closedPositions) },
-      { label: 'Analyzed Markets', value: String(input.analyzedMarkets.length) },
-      { label: 'Signals Approved', value: String(input.approvedSignals) },
-      { label: 'Signals Blocked', value: String(input.blockedSignals) },
-    ],
+ return {
+ summaryCards: [
+ { label: 'Wallet Equity', value: formatUsd(walletEquity) },
+ { label: 'Cash', value: formatUsd(input.wallet.cash) },
+ { label: 'Realized PnL', value: formatUsd(input.wallet.realizedPnl) },
+ { label: 'Open Positions', value: String(input.wallet.openPositions) },
+ { label: 'Closed Positions', value: String(input.closedPositions) },
+ { label: 'Analyzed Markets', value: String(input.analyzedMarkets.length) },
+ { label: 'Signals Approved', value: String(input.approvedSignals) },
+ { label: 'Signals Blocked', value: String(input.blockedSignals) },
+ ...(input.winRate
+ ? [
+ { label: 'Win Rate', value: `${(input.winRate.winRate * 100).toFixed(1)}%` },
+ { label: 'Resolved Wins', value: `${input.winRate.wins}/${input.winRate.totalResolved}` },
+ { label: 'Win Rate PnL', value: formatUsd(input.winRate.totalPnl) },
+ ]
+ : []),
+ ],
     openPositionRows: positionRows.filter((position) => position.status === 'OPEN'),
     closedPositionRows: positionRows.filter((position) => position.status === 'CLOSED'),
     marketRows: input.analyzedMarkets.map((market) => ({

@@ -6,3 +6,4 @@ operator-runtime/
 .env
 *.log
 operator-runtime/
+paper-wallet-state.json
